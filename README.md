@@ -7,7 +7,7 @@ A collection of functions for the analysis of astronomical data cubes and images
 ## Installation
 Install nicci with pip
 ```bash
-  pip install 'pathtotar/'
+  pip install git+https://github.com/SJVeronese/nicci-package.git
 ```
 ## Requirements
 * astropy 4.3.1
