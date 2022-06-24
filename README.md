@@ -1,4 +1,4 @@
-# New AnalysIs Code for Cubes and Images
+# New analysIs Code for Cubes and Images
 A collection of functions for the analysis of astronomical data cubes and images
 
 ## Authors
