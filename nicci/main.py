@@ -5,24 +5,43 @@ New analysIs Code for Cubes and Images
 """
 #############################################################################################
 #
-# FILENAME: myfunc
-# VERSION: 0.9
-# DATE: 22/06/2022
+# FILENAME: main
+# VERSION: 0.9.2 (alpha)
+# DATE: 27/06/2022
 # CHANGELOG:
-#   v 0.9:  - improved documentation
+#   v 0.9.2: - importparamaters/create_config
+#               - updated for changes in cubedo
+#           - chanmap
+#               - fixed bpa estimation if not given
+#               - improved ancillary information display
+#               - fixed objname import
+#           - cubedo
+#               - fixed chanmax calculation (data is now loaded before the computation)
+#               - added box option in operation cut
+#           - getpv
+#               - fixed systemic velocity display
+#               - fixed contour levels dispaly if given
+#               - fixed objname import
+#           - plotmom
+#               - changed mom2 colormap to greens
+#               - removed sigma from detection limit
+#               - fixed objname import
+#           - rotcurve
+#               - fixed objname import
+#           - converttoHI
+#               - fixed calculation
 #
 #   TO DO:  - aggiungi i Raises ai docstring
-#           - converttoHI, flux e getHImass: controlla le formule, in particolare di flux e converttoHI. Pixelres l'ho
-#             tolta dal calcolo ma l'ho lasciata negli input. Una volta che hai confermato l'equazione, se non c'é
-#             pixelres, toglila da tutto
 #           - rimuovi tutti i .close() relativi a fits aperti con with. Non servono
+#           - gaussfit, copia metodo in removemod per fittare senza la maschera se questa non viene data
 #           - chanmap, la maschera puó essere data tramite il parameter file (vedi cubedo)
-#           - cubedo, in operazione cut aggiungi taglio xmin,xmax,ymin,ymax
+#           - chanmap, guarda chanmap dati fraternali: 10kpc é sopra dati e leggermente fuori plot. Sarebbe da avere un top margin vuoto dove mettere 10 kpc line. Scritta sotto, é sopra plot. Sarebbe da avere bottom margin vuoto per contenere scritta. Usa questi dati per trovare il giusto modo di farlo (in pratica vuoi il plot con una banda bianca sopra e sotto dove mettere le ancillari info. Lo stesso vale per plotmom
 #           - rotcurve, non fa quello chefa rotcurve in gipsy
 #           - crea la funzione update_params che aggiorna il valore di un parametro nel dizionario dei parametri. Utile
 #             per quando ad sempi non hai i valori del beam e usi cubestat per trovarli e cubestat li inserisce nel
 #             dizionario
 #           - aggiungere l'interpolazione in shuffle
+#           - aggiungere galmod, fixhead di gipsy
 #           - aggiungere il logger (con logger.)
 #
 #############################################################################################
@@ -187,6 +206,9 @@ def importparameters(parameterfile):
     parameters['cubedoindir']=config.get('CUBEDO','inputdir') if config.has_option('CUBEDO','inputdir') else None #input directory. If empty, is the same of [INPUT] path. If it is not given, set it to None
     parameters['chanmin']=config.getint('CUBEDO','chanmin') if config.has_option('CUBEDO','chanmin') else 0 #first channel for the operations 'blank,cut,mom0'. If it is not given, set it to 0
     parameters['chanmax']=config.getint('CUBEDO','chanmax') if config.has_option('CUBEDO','chanmax') else None #last channel for the operations 'blank,cut,mom0'. If it is not given, set it to None
+    parameters['cutbox']=config.get('CUBEDO','cutbox').split(',') if config.has_option('CUBEDO','cutbox') else None #comma-separated pixel edges of the box to extract for operation 'cut' in the format [xmin,xmax,ymin,ymax]. If it is not given, set it to None
+    if parameters['cutbox'] != [''] and parameters['cutbox'] is not None: #if the box is given
+        parameters['cutbox']=[int(i) for i in parameters['cutbox']] #convert string to float
     parameters['addchan']=config.getint('CUBEDO','addchan') if config.has_option('CUBEDO','addchan') else None #number of channels to add in operation 'extend'. Negative values add lower channels, positive add higher channels. If it is not given, set it to None
     parameters['value']=config.get('CUBEDO','value') if config.has_option('CUBEDO','value') else 'blank' #value to assign to blank pixel in operation 'blank' (blank is np.nan). If it is not given, set it to 'blank'
     if parameters['value'] != 'blank': #if the value is not blank
@@ -381,8 +403,8 @@ def chanmap(datacube='',rms=None,from_chan=0,to_chan=None,chansep=1,chanmask=Fal
         asectokpc=None #set it to None
     if 'objname' in kwargs: #if the object name is in the input kwargs
         objname=kwargs['objname'] #store the object name from the input kwargs
-    if objname is None: #if in kwargs but not set
-        objname='' #set it to empty
+        if objname is None: #if in kwargs but not set
+            objname='' #set it to empty
     else:
         objname='' #set it to empty
     if 'contours' in kwargs: #if the conotur levels are in the input kwargs
@@ -407,7 +429,7 @@ def chanmap(datacube='',rms=None,from_chan=0,to_chan=None,chansep=1,chanmask=Fal
         
     # NOW WE CHECK FOR THE RELEVANT INFORMATION #
     #------------   BEAM AND RMS    ------------#
-    if spectralres is None or rms is None or bmaj is None or bmin is None: #if one or more cube parameters are not given
+    if spectralres is None or rms is None or bmaj is None or bmin is None or bpa is None: #if one or more cube parameters are not given
         if 'nsigma' in kwargs: #check if nsgima keyword is in the input kwargs. If so, pass it through the **kargs, else, pass it explicitly
             stats=cubestat(datacube=datacube,spectralres=spectralres,rms=rms,bmaj=bmaj,bmin=bmin,bpa=bpa,verbose=False) #calculate the statistics of the cube
         else:
@@ -525,17 +547,18 @@ def chanmap(datacube='',rms=None,from_chan=0,to_chan=None,chansep=1,chanmask=Fal
                ax.coords[0].set_ticklabel_visible(False) #hide the x-axis ticklabels and labels
             ax.set_xlim(xlim) #set the xlim
             ax.set_ylim(ylim) #set the ylim
-            ax.text(leftmargin,bottommargin,'Radial velocity: {:.2f} km/s'.format(chans[k]*spectralres+chan0-vsys)) #add the information of the channel velocity
+            ax.text(leftmargin,bottommargin,'V$_{{rad}}$: {:.2f} km/s'.format(chans[k]*spectralres+chan0-vsys)) #add the information of the channel velocity
             if pixelres is not None and bmaj is not None and bmin is not None and bpa is not None: #if the pixel resolution and the beam is given
                 pxbeam=np.array([bmaj,bmin])/pixelres #beam in pixel
                 box=patch.Rectangle((xlim[1]-4*pxbeam[0],ylim[0]),4*pxbeam[0],4*pxbeam[1],fill=None) #create the box for the beam
                 beam=patch.Ellipse((xlim[1]-2*pxbeam[0],ylim[0]+2*pxbeam[1]),pxbeam[0],pxbeam[1],bpa,hatch='/////',fill=None) #create the beam patch
                 ax.add_patch(box) #add the beam box
                 ax.add_patch(beam) #add the beam
-            if pixelres is not None and asectokpc is not None: #if the pixel resolution and the arcsec-to-kpc conversion is given
-                kpcline=10/(asectokpc*pixelres) #length of the 10 kpc line in pixel
-                ax.hlines(topmargin-5,leftmargin,leftmargin+kpcline,color='black',linewidth=2) #add the 10 kpc line
-                ax.annotate('10 kpc',(leftmargin+(kpcline/2),topmargin),ha='center')
+            if j == 0: #in the fisr columns
+                if pixelres is not None and asectokpc is not None: #if the pixel resolution and the arcsec-to-kpc conversion is given
+                    kpcline=10/(asectokpc*pixelres) #length of the 10 kpc line in pixel
+                    ax.hlines(topmargin-5,leftmargin,leftmargin+kpcline,color='black',linewidth=2) #add the 10 kpc line
+                    ax.annotate('10 kpc',(leftmargin+(kpcline/2),topmargin),ha='center')
             k+=1
             
     fig.subplots_adjust(left=0.075, bottom=0.05, right=0.98, top=0.95, wspace=0.0, hspace=0.0) #fix the position of the subplots in the figure
@@ -548,7 +571,7 @@ def chanmap(datacube='',rms=None,from_chan=0,to_chan=None,chansep=1,chanmask=Fal
         plt.close()
 
 #############################################################################################
-def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,addchan=None,value='blank',withmask=False,
+def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,cutbox=None,addchan=None,value='blank',withmask=False,
            cubedomask=None,cliplevel=0.5,xrot=None,yrot=None,zrot=None,cubedooutdir='',cubedooutname='',**kwargs):
     """Perform the selected operation between blank, clip, crop, cut, extend, mirror, mom0, shuffle, toint on a fits data cube.
 
@@ -567,6 +590,7 @@ def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,addcha
             toint, convert the data cube into an integer cube
         chanmin (int): first channel for operations blank, cut, mom0
         chanmax (int): last channel for operations blank, cut, mom0
+        box (list/array): spatial cut box as [xmin,xmax,ymin,ymax]
         addchan (int): number of channels to add in operation extend. If < 0 the channels are added at the beginning of the spectral axis, else at the end
         value (float/string): value to give to the blanked pixel in operation blank. If string 'blank' it will be np.nan
         withmask (bool): option to use a detection mask (True) or not (False) for clip and mom0. If it is True, a 2D mask for clip or 3D mask for mom0 must be provided using the cubedomask  argument or the 'mask2d' and 'maskcube' kwarg (see kwargs arguments below)
@@ -737,6 +761,7 @@ def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,addcha
 
         #------------   CUT     ------------#   
         if operation == 'cut': #if the datacube must be cutted
+            data=cube[0].data.copy() #store the data
             #WE CHECK THE CHANNELS
             if chanmin is None or chanmin < 0: #if not given or less than 0
                 warnings.warn('Starting channel wrongly set. You give {} but should be at least 0. Set to 0'.format(chanmin))
@@ -749,13 +774,31 @@ def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,addcha
             elif chanmax < chanmin: #if the higher channel is less than the lower
                 warnings.warn('Last channel ({}) lower than starting channel ({}). Last channel set to {}.'.format(chanmax,chanmin,data.shape[0]))
                 chanmax=data.shape[0]+1 #select until the last channel
+            if cutbox is None: #if no box is given
+                xmin=ymin=0 #start from 0
+                xmax=data.shape[2] #select unti the last x-pixel
+                ymax=data.shape[1] #select unti the last y pixel
+            elif len(cutbox) != 4: #if the box has the wring size
+                raise ValueError('ERROR: Please provide the box in the format [xmin,xmax,ymin,ymax]. Aborting!')
+            else: #store the spatial box from the input
+                xmin=cutbox[0]
+                xmax=cutbox[1]
+                ymin=cutbox[2]
+                ymax=cutbox[3]
             for i in range(len(cube)): #for each HDU of the fits file
-                cube[i].data=cube[i].data[chanmin:chanmax] #extract the  subcube
-                if type(cube[i]) == fits.hdu.image.PrimaryHDU: #if the HDU is a Primary SHDU
+                if type(cube[i]) == fits.hdu.image.PrimaryHDU: #if the HDU is a Primary HDU
+                    cube[i].data=cube[i].data[chanmin:chanmax,ymin:ymax,xmin:xmax] #extract the  subcube
+                    wcs=WCS(cube[0].header) #store the wcs
+                    wcs=wcs[:,xmin:xmax,ymin:ymax] #crop the wcs
+                    newheader=wcs.to_header() #write the wcs into a header
+                    cube[i].header['CRPIX1']=newheader['CRPIX1'] #update the header
+                    cube[i].header['CRPIX2']=newheader['CRPIX2'] #update the header
                     if 'CRVAL3' in cube[i].header and 'CDELT3' in cube[i].header: #if the spectral keywords exist
                         cube[i].header['CRVAL3']=cube[i].header['CRVAL3']+chanmin*cube[0].header['CDELT3'] #recalculate the spectral axis 
                     else:
                         raise ValueError('ERROR: no spectral keywords in the header. Cannot recalculate the spectral axis: aborting') 
+                else:
+                    cube[i].data=cube[i].data[chanmin:chanmax] #extract the  subcube
         
         #------------   EXTEND     ------------# 
         if operation == 'extend': #if the datacube must be cutted
@@ -1489,8 +1532,8 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
         asectokpc=None #set it to None
     if 'objname' in kwargs: #if the object name is in the input kwargs
         objname=kwargs['objname'] #store the object name from the input kwargs
-    if objname is None: #if in kwargs but not set
-        objname='' #set it to empty
+        if objname is None: #if in kwargs but not set
+            objname='' #set it to empty
     else:
         objname='' #set it to empty
     if 'subtitle' in kwargs: #if the arcsec-to-kpc conversion is in the input kwargs
@@ -1557,7 +1600,7 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
         chmax=data.shape[0] #set to the max channel
         
     #WE EXTRACT THE PVSLICE AND REFER THE SPATIAL AXIS TO THE SLICE CENTER#    
-    pv=extract_pv_slice(data[chmin:chmax,:,:],pvpath,wcs=wcs) #extract the pv slice
+    pv=extract_pv_slice(data[chmin:chmax,:,:],pvpath,wcs=wcs[chmin:chmax,:,:]) #extract the pv slice
     pv.header['CRPIX1']=round(pv.header['NAXIS1']/2)+1 #fix the header in order to have the distance from the center as spatial dimension
     
     #WE SAVE THE SLICE IF NEEDED#
@@ -1601,7 +1644,7 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
         if pv_ctr is None: #if no contour levels are provided
             ctr=np.power(pvsig,np.arange(1,9,2)) #4 contours level between nsigma and nsigma^8
         else:
-            ctr=np.linspace(-0.25*np.nanmax(data),0.65*np.nanmax(data),8) #7 contours levels between the min and max of the moment 0
+            ctr=pv_ctr #use those in input
         #WE DO THE PLOT#
         im=ax.imshow(data,cmap='Greys',norm=norm,aspect='auto') #plot the pv slice in units of rms
         ax.tick_params(direction='in') #change the ticks of the axes from external to internal
@@ -1618,7 +1661,9 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
         ax.contour(data/rms,levels=-np.flip(ctr),colors='gray',linewidths=ctr_width,linestyles='dashed') #add the negative contours
         #WE ADD ANCILLARY INFORMATION#
         if vsys is not None: #if the systemic velocity is given
-            ax.axhline(y=((vsys-pv.header['CRVAL2'])/pv.header['CDELT2'])-pv.header['CRPIX2'],linestyle='--',color='black') #draw the systemic velocity line
+            if pv.header['CUNIT2']=='m/s': #if the spectral units are m/s
+                vsys=vsys*1000 #convert the systemic velocity into m/s
+            ax.axhline(y=((vsys-pv.header['CRVAL2'])/pv.header['CDELT2'])+pv.header['CRPIX2']-1,linestyle='--',color='black') #draw the systemic velocity line. -1 is due to python stupid 0-couting
         else:
             ax.axhline(y=((0-pv.header['CRVAL2'])/pv.header['CDELT2'])-pv.header['CRPIX2'],linestyle='--',color='black') #draw the systemic velocity line
         if pixelres is not None and asectokpc is not None: #if the pixel resolution and the arcsec-to-kpc conversion is given
@@ -1837,8 +1882,8 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         asectokpc=None #set it to None
     if 'objname' in kwargs: #if the object name is in the input kwargs
         objname=kwargs['objname'] #store the object name from the input kwargs
-    if objname is None: #if in kwargs but not set
-        objname='' #set it to empty
+        if objname is None: #if in kwargs but not set
+            objname='' #set it to empty
     else:
         objname='' #set it to empty
     if 'subtitle' in kwargs: #if the arcsec-to-kpc conversion is in the input kwargs
@@ -1916,12 +1961,12 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
             beamarea=1.13*(bmin*bmaj) #calculate the beam area
         else:
             beamarea=None #set it to None
-        if beamarea is not None and spectralres is not None and pixelres is not None: #if we have the beamarea, spectral and spatial resolution
-            mom0=converttoHI(mom0,beamarea=beamarea,pixelres=pixelres,spectralres=spectralres,units=mom0header['BUNIT']) #convert the moment 0 map into an HI column density map
+        if beamarea is not None and spectralres is not None: #if we have the beamarea and spectral resolution
+            mom0=converttoHI(mom0,beamarea=beamarea,spectralres=spectralres,units=mom0header['BUNIT']) #convert the moment 0 map into an HI column density map
             mom0=mom0/10.**(18) #normalize the column density in terms of 10^18 cm^-2
             momunit='cm$^{-2}$' #define the column density unit
             if use_cube: #if use cube
-                sens=converttoHI(sens,beamarea=beamarea,pixelres=pixelres,spectralres=spectralres,units='Jy/beam') #convert the sensitivity into HI column density
+                sens=converttoHI(sens,beamarea=beamarea,spectralres=spectralres,units='Jy/beam') #convert the sensitivity into HI column density
                 sens=sens/10.**(18) #normalize the column density in terms of 10^18 cm^-2
             else:
                 warnings.warn('The sensitivity is refering to the minimum of the moment 0 map.')
@@ -2052,7 +2097,7 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         cb.set_ticks(ctr.astype(int)) #set the ticks of the colobar to the levels of the contours
         #WE ADD ANCILLARY INFORMATION#
         if momunit == 'cm$^{-2}$': #if the moment 0 is column density
-            ax.text(leftmargin,bottommargin,'Detection limit: \u03c3 = {:.2e} {}'.format(sens*10.**(18),momunit)) #add the information of the detection limit
+            ax.text(leftmargin,bottommargin,'Detection limit: {:.2e} {}'.format(sens*10.**(18),momunit)) #add the information of the detection limit
         if pixelres is not None and bmaj is not None and bmin is not None and bpa is not None: #if the pixel resolution and the beam is given
             pxbeam=np.array([bmaj,bmin])/pixelres #beam in pixel
             box=patch.Rectangle((xlim[1]-4*pxbeam[0],ylim[0]),4*pxbeam[0],4*pxbeam[1],fill=None) #create the box for the beam
@@ -2152,7 +2197,7 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         #WE DEFINE THE CONTOURS#
         ctr=np.power(2,np.arange(0,5,0.5))*disp #contours level in units of velocity dispersion
         #WE DO THE PLOT#
-        im=ax.imshow(mom2,cmap='RdPu',aspect='auto') #plot the moment 2 map with a square-root colormap and in units of velocity dispersion
+        im=ax.imshow(mom2,cmap='YlGn',aspect='auto') #plot the moment 2 map with a square-root colormap and in units of velocity dispersion
         ax.tick_params(direction='in') #change the ticks of the axes from external to internal
         ax.set_xlim(xlim) #set the xlim
         ax.set_ylim(ylim) #set the ylim
@@ -2388,8 +2433,8 @@ def rotcurve(mom1map='',pa=None,rotcenter=None,rotcurveoutdir='',rotcurveoutname
         asectokpc=None #set it to None
     if 'objname' in kwargs: #if the object name is in the input kwargs
         objname=kwargs['objname'] #store the object name from the input kwargs
-    if objname is None: #if in kwargs but not set
-        objname='' #set it to empty
+        if objname is None: #if in kwargs but not set
+            objname='' #set it to empty
     else:
         objname='' #set it to empty
            
@@ -2464,13 +2509,12 @@ def rotcurve(mom1map='',pa=None,rotcenter=None,rotcurveoutdir='',rotcurveoutname
                         
 ################################ --- ANCILLARY FUNCTIONS --- ################################
 #############################################################################################
-def converttoHI(data,beamarea=None,pixelres=None,units=None,spectralres=None):
+def converttoHI(data,beamarea=None,units=None,spectralres=None):
     """Convert the flux in an array into HI column density.
 
     Args:
         data (string/array): name or path+name of the fits data, or array of the data
         beamarea (float): area of the beam in arcsec^2
-        pixelres (float): pixel resolution of the data in arcsec
         units (string): string with the units of the data
         spectralres (float): data spectral resolution in km/s
 
@@ -2487,7 +2531,7 @@ def converttoHI(data,beamarea=None,pixelres=None,units=None,spectralres=None):
             darray=Data[0].data #store the data
             Data.close() #close the fits file
     else: #if the data is given as a numpy array
-        if spectralres is None or beamarea is None or pixelres is None: #if no additional information are given, abort
+        if spectralres is None or beamarea is None: #if no additional information are given, abort
             ValueError('ERROR: Please provide the spatial and spectral resolution, and the beam area. Aborting!')
         darray=data #store the data
         
@@ -2501,16 +2545,6 @@ def converttoHI(data,beamarea=None,pixelres=None,units=None,spectralres=None):
         else: #if no beam info have been found, abort
             raise ValueError('ERROR: No beam information are found: aborting!')
         beamarea=1.13*bmaj*bmin #calculate the beam area
-    #------------   PIXEL RESOLUTION     ------------#
-    if pixelres is None: #if no pixel resolution is provided
-        if type(data) is str: #if the data as a path-to-file
-            if 'CDELT1'.casefold() in header: #check the pixel resolution keyword
-                pixelres=header['CDELT1'.casefold()]**2 #store the pixel resolution and convert it into pixelarea
-            else:
-                raise ValueError('ERROR: No pixel resolution is found: aborting!')
-        else:
-            raise ValueError('ERROR: No pixel resolution is found: aborting!')
-    pixelsize=pixelres**2 #convert to pixel size
     #------------   UNITS     ------------#
     if units is None: #if no units for the data are provided
         if type(data) is str: #if the data as a path-to-file
@@ -2936,6 +2970,7 @@ def create_config(name='default_parameters'):
             'inputdir	=	   #input directory. If empty, is the same of [INPUT] path (default: None)\n'
             "chanmin		=	   #first channel for the operations 'blank,cut,mom0' (default: 0)\n"
             "chanmax		=	   #last channel for the operations 'blank,cut,mom0' (default: None)\n"
+            "cutbox         =       #comma-separated pixel edges of the box to extract for operation 'cut' in the format [xmin,xmax,ymin,ymax] (default: None)\n"
             "addchan		=	   #number of channels to add in operation 'extend'. Negative values add lower channels, positive add higher channels (default: None)\n"
             "value		=	   #value to assign to blank pixel in operation 'blank' (blank is np.nan) (default: blank)\n"
             "usemask		=	   #use a 2D mask in the operation 'clip' [True,False] (default: False)\n"
