@@ -11,6 +11,13 @@ Install nicci with pip
 ```bash
   pip install git+https://github.com/SJVeronese/nicci-package.git
 ```
+
+## Upgrade
+Upgrade nicci with pip
+```bash
+  pip install --upgrade git+https://github.com/SJVeronese/nicci-package.git
+```
+
 ## Requirements
 * astropy 4.3.1
 * configparser 5.2.0
