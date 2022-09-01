@@ -6,68 +6,51 @@ New analysIs Code for Cubes and Images
 #############################################################################################
 #
 # FILENAME: main
-# VERSION: 0.10
-# DATE: 19/08/2022
+# VERSION: 0.10.1
+# DATE: 01/09/2022
 # CHANGELOG:
-#   v 0.10: - importparameters
-#               - added the parameter chanbox
-#               - added parameters to account changes in the other functions
-#           - chanmap
-#               - improved cube properties retrival
-#               - improved automatic retrival of spatial and spectral info from the cube if not given
-#               - added automatic conversion to arcsec and km/s
-#               - improved ancillary information display
-#               - improved automatic limits calculation
-#               - improved systemic velocity import
-#               - added the option to select a spatial box
-#               - improved input arguments call
-#               - aspect ratio is now 'equal' and no more 'auto'
+#   v 0.10.1: - chanmap
+#               - changed contours colors
+#               - fixed the print of auto-contours level values
+#               - added prints to show used parameters
+#               - improved contour levels printing
 #           - cubedo
-#               - fixed wcs recalculation in operation 'cut'
-#               - added check on type of HDU to avoid extend tables in operation 'extend'
-#           - cubestat
-#               - complete rework of the cube reading routine
-#               - added units information to the output
-#               - fixed sensitivity calculation
-#               - fixed sensitivity print
-#               - improved input arguments call
+#               - fixed path check if input cube name already has path
+#               - fixed data import with operation 'blank' and 'mom0'
+#               - fixed and improved spectral properties import
+#               - optimized the shuffle operation
+#               - fixed central channel calculation in operation 'shuffle'
 #           - gaussfit
-#               - can now fit without a mask
+#               - (NEW) added option to compute the best-fit velocity field
+#               - fixed spectral resolution import
+#               - added print to show used parameters
 #           - getpv
-#               - no longer checks for pvangle if more than 2 points are given
-#               - now accept undefined number of points
-#               - improved data normalization
-#               - improved contours color
-#               - improved ancillary information display
-#               - changed normalization from sqrt to cube root
+#               - improved pixel resolution import and retrival
+#               - fixed issue when plotting with negative pixel resolution
+#               - fixed pv width calculation
+#               - fixed systemic velocity units
+#               - fixed displey of vertical line for path center
+#               - added prints to show used parameters
+#               - improved contour levels printing
 #           - plotmom
-#               - fixed sensitivity import according to new cubestat
-#               - improved cube properties retrival
-#               - improved automatic retrival of spatial and spectral info from the cube or maps if not given
-#               - added automatic conversion from deg/arcimn and m/s to arcsec and km/s
-#               - improved ancillary information display
-#               - improved automatic limits calculation
-#               - improved mom1 contours calculation
-#               - changed mom0 normalization from sqrt to cube root
-#               - aspect ratio is now 'equal' and no more 'auto'
-#           - converttoHI
-#               - accept various spatial and spectral units and automatically converts to arcsec and km/s
-#           - getHImass
-#               - accept various spatial units and automatically converts to arcsec
+#               - changed contours colors for all maps
+#               - changed moment 1 and moment 2 colormap
+#               - added the input argument for the contour levels of moment 1 and moment 2
+#               - added the input argument for the contour colors of moment 0 and moment 2
+#               - added the input argument for the colormap of each map
 #           - flux
-#               - accept various spatial and spectral units and automatically converts to arcsec and km/s
-#               - fixed box call
-#           - create_config
-#               - added parameters to account changes in the other functions
-#           - changed default spectral unit from km/s to m/s
-#           - remove the redundant fits.close() when using with fits.open() ... as ...
-#           - added checks on the boxes sizes
+#               - added the negative flux removal
+#               - fixed issue with checking of box size
+#               - fixed inverted x,y when box is used
+#           - getHImass
+#               - added the negative flux removal
+#               - fixed issue with checking of box size
+#               - fixed inverted x,y when box is used
+#           - all the values are printed with 1 decimal and not 2
+#           - more compact version of importing variables from kwargs
 #           - improved documentation
 #
 #   TO DO:  - rotcurve, non fa quello chefa rotcurve in gipsy
-#           - crea la funzione update_params che aggiorna il valore di un parametro nel dizionario dei parametri. Utile
-#             per quando ad sempi non hai i valori del beam e usi cubestat per trovarli e cubestat li inserisce nel
-#             dizionario
 #           - aggiungere l'interpolazione in shuffle
 #           - aggiungere galmod, fixhead di gipsy
 #           - aggiungere il logger (con logger.)
@@ -286,6 +269,7 @@ def importparameters(parameterfile):
     parameters['clipping']=config.getboolean('GAUSSFIT','clipping') if config.has_option('GAUSSFIT','clipping') else False #clip the spectrum to a % of the profile peak [True,False]. If it is not given, set it to False
     parameters['clipthreshold']=config.getfloat('GAUSSFIT','threshold') if config.has_option('GAUSSFIT','threshold') else 0.5 #clip threshold as % of the peak (0.5 is 50%) if clipping is True. If it is not given, set it to 0.5
     parameters['errors']=config.getboolean('GAUSSFIT','errors') if config.has_option('GAUSSFIT','errors') else False #compute the errors on the best-fit [True,False]. If it is not given, set it to False
+    parameters['write_field']=config.getboolean('GAUSSFIT','write_field') if config.has_option('GAUSSFIT','write_field') else False #compute the best-fit velocity field [True,False]. If it is not given, set it to False
     parameters['gaussoutdir']=config.get('GAUSSFIT','outputdir') if config.has_option('GAUSSFIT','outputdir') else None #output directory to save the model cube. If empty, is the same as [INPUT] path. If it is not given, set it to None
     parameters['gaussoutname']=config.get('GAUSSFIT','outname') if config.has_option('GAUSSFIT','outname') else None #output name of the model cube including extension .fits. If it is not given, set it to None
 
@@ -369,7 +353,7 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
         vsys (float): object systemic velocity in m/s (Default: 0)
         asectokpc (float): arcsec to kpc conversion to plot the spatial scale (Default: None)
         objname (string): name of the object (Default: '')
-        contours (list/array): contours levels in terms of rms. They will replace the default levels (Default: None)                                    
+        contours (list/array): contour levels in units of rms. They will replace the default levels (Default: None)                                    
         chansig (float): lowest contour level in terms of chansig*rms (Default: 3)
         ctr_width (float): line width of the contours (Default: 2)
         verbose (bool): option to print messages and plot to terminal if True (Default: None)
@@ -388,10 +372,7 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
         ValueError: If size of spatial box is not 4
     """
     #CHECK THE INPUT#
-    if 'verbose' in kwargs: #check if the verbose option is in kwargs
-        verbose=kwargs['verbose'] #store the verbose option from the input kwargs
-    else:
-        verbose=False #set it to False
+    verbose=kwargs['verbose'] if 'verbose' in kwargs else False #store the verbose option from the input kwargs or set it to False
     if datacube == '' or datacube is None: #if a data cube is not given
         raise ValueError('ERROR: datacube is not set: aborting!')
     if datacube[0] != '.': #if the data cube name start with a . means that it is a path to the cube (so differs from path parameter)
@@ -423,42 +404,19 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
     if outname[0] != '.': #if the outname name start with a . means that it is a path to the cube (so differs from path parameter)
         outname=outdir+outname
     #CHECK THE KWARGS#
-    if 'pixunits' in kwargs: #if the spatial units are in the input kwargs
-        pixunits=kwargs['pixunits'] #store the spatial units from the input kwargs
-    else:
-        pixunits=None #set it to None   
-    if 'specunits' in kwargs: #if the spectral units are in the input kwargs
-        specunits=kwargs['specunits'] #store the spectral units from the input kwargs
-    else:
-        specunits=None #set it to None    
-    if 'pixelres' in kwargs: #if the pixel resolution is in the input kwargs
-        pixelres=kwargs['pixelres'] #store the pixel resolution from the input kwargs
-    else:
-        pixelres=None #set it to None
-    if 'spectralres' in kwargs: #if the spectral resolution is in the input kwargs
-        spectralres=kwargs['spectralres'] #store the spectral resolution from the input kwargs
-    else:
-        spectralres=None #set it to None
-    if 'bmaj' in kwargs: #if the beam major axis is in the input kwargs
-        bmaj=kwargs['bmaj'] #store the beam major axis from the input kwargs
-    else:
-        bmaj=None #set it to None
-    if 'bmin' in kwargs: #if the beam minor axis is in the input kwargs
-        bmin=kwargs['bmin'] #store the beam minor axis from the input kwargs
-    else:
-        bmin=None #set it to None
-    if 'bpa' in kwargs: #if the beam position angle is in the input kwargs
-        bpa=kwargs['bpa'] #store the beam position angle from the input kwargs
-    else:
-        bpa=None #set it to None
-    if 'rms' in kwargs: #if the cube rms is provided
-        rms=kwargs['rms'] #store the rms from the input kwargs
-    else:
-        rms=None #set it to None
-    if 'chanbox' in kwargs: #if a box is provided
-        chanbox=kwargs['chanbox'] #store the box from the input kwargs
-    else:
-        chanbox=None #set it to None
+    pixunits=kwargs['pixunits'] if 'pixunits' in kwargs else None
+    if pixunits not in [None,'deg','arcmin','arcsec']: #if wrong spatial units are given
+        raise ValueError('ERROR: Please provide the spatial units in deg, arcmin or arcsec. Aborting!')
+    specunits=kwargs['specunits'] if 'specunits' in kwargs else None
+    if specunits not in [None,'km/s','m/s','Hz']: #if wrong spatial units are given
+        raise ValueError('ERROR: Please provide the spectral units km/s, m/s or Hz. Aborting!')   
+    pixelres=kwargs['pixelres'] if 'pixelres' in kwargs else None
+    spectralres=kwargs['spectralres'] if 'spectralres' in kwargs else None
+    bmaj=kwargs['bmaj'] if 'bmaj' in kwargs else None
+    bmin=kwargs['bmin'] if 'bmin' in kwargs else None
+    bpa=kwargs['bpa'] if 'bpa' in kwargs else None
+    rms=kwargs['rms'] if 'rms' in kwargs else None
+    chanbox=kwargs['chanbox'] if 'chanbox' in kwargs else None
     if 'vsys' in kwargs: #if the systemic velocity is in the input kwargs
         if kwargs['vsys'] is not None: #if it is also not None
             vsys=kwargs['vsys'] #store the systemic velocity from the input kwargs
@@ -468,33 +426,14 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
     else:
         vsys=0 #set it to 0
         warnings.warn('No systemic velocity is given: set it to 0 m/s!')
-    if 'asectokpc' in kwargs: #if the arcsec-to-kpc conversion is in the input kwargs
-        asectokpc=kwargs['asectokpc'] #store the arcsec-to-kpc conversion from the input kwargs
-    else:
-        asectokpc=None #set it to None
-    if 'objname' in kwargs: #if the object name is in the input kwargs
-        objname=kwargs['objname'] #store the object name from the input kwargs
-        if objname is None: #if in kwargs but not set
-            objname='' #set it to empty
-    else:
-        objname='' #set it to empty
-    if 'contours' in kwargs: #if the conotur levels are in the input kwargs
-        contours=kwargs['contours'] #store the contour levels from the input kwargs
-    else:
-        contours=None #set it to None
-    if 'chansig' in kwargs: #if the lowest contours sigma is in the input kwargs
-        chansig=kwargs['chansig'] #store the lowest contours sigma from the input kwargs
-    else:
-        chansig=3 #set it to 3
-    if 'ctr_width' in kwargs: #if the contours width is in the input kwargs
-        ctr_width=kwargs['ctr_width'] #store the contours width from the input kwargs
-    else:
-        ctr_width=2 #set it to 2
-    if pixunits not in [None,'deg','arcmin','arcsec']: #if wrong spatial units are given
-        raise ValueError('ERROR: Please provide the spatial units in deg, arcmin or arcsec. Aborting!')
-    if specunits not in [None,'km/s','m/s','Hz']: #if wrong spatial units are given
-        raise ValueError('ERROR: Please provide the spectral units km/s, m/s or Hz. Aborting!')
-        
+    asectokpc=kwargs['asectokpc'] if 'asectokpc' in kwargs else None
+    objname=kwargs['objname'] if 'objname' in kwargs else None
+    if objname is None:
+        objname='' 
+    contours=kwargs['contours'] if 'contours' in kwargs else None
+    chansig=kwargs['chansig'] if 'chansig' in kwargs else 3
+    ctr_width=kwargs['ctr_width'] if 'ctr_width' in kwargs else 2
+
     #---------------   START THE FUNCTION   ---------------#    
     # NOW WE OPEN THE DATACUBE #
     with fits.open(datacube) as cube: #open the data cube
@@ -555,6 +494,14 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
         vsys=vsys/1000 #covert the systemic velocity in km/s
     wcs=WCS(header).dropaxis(2) #store the WCS info and drop the spectral axis
 
+    if verbose:
+        print('The channel map will be plotted with the following parameters:\n'
+        'Spectral resolution: {:.1f} km/s\n'
+        'Spatial resolution: {:.1f} arcsec\n'
+        'Starting velocity: {:.1f} km/s\n'
+        'Systemic velocity: {:.1f} km/s\n'
+        'Beam: {:.1f} x {:.1f} arcsec\n'
+        '-------------------------------------------------'.format(spectralres,pixelres,chan0-vsys,vsys,bmaj,bmin))
     # NOW WE CHECK IF A MASK IS USED AND OPEN IT #
     if chanmask: #if a mask must be used
         with fits.open(maskcube) as maskcube: #open the mask cube
@@ -601,7 +548,12 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
         if ymax > data.shape[1]: #if ymax is too high
             warnings.warn('Max y is too high ({}): set to the size of y.'.format(ymax))
             ymax=data.shape[1] #set it to size of data
-                
+    
+    if verbose:
+        print('The channel map will be plotted with the following parameters:\n'
+        'from pixel ({},{}) to pixel ({},{})\n'
+        'from channel {} to channel {} every {} channel\n'
+        '-------------------------------------------------'.format(xmin,ymin,xmax,ymax,from_chan,to_chan,chansep))
     # NOW WE SETUP THE FIGURE #    
     nrows=int(np.ceil(np.sqrt(len(chans)))) #number of rows in the channel map
     ncols=int(np.floor(np.sqrt(len(chans)))) #number of columns in the channel map
@@ -635,10 +587,16 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
     #------------   CONTOURS  ------------#
     if contours is None: #if contours levels are not given:
         maxsig=round(np.log(np.sqrt(vmax)/rms)/np.log(chansig)) #calculate the max sigma in the data
-        ctr=np.power(chansig,np.arange(1,maxsig,2)) #contours level in units of nsigma^i (i from 1 to max sigma)
+        ctr=np.power(chansig,np.arange(1,maxsig,2)) #contours level in units of nsigma^i (i from 1 to max sigma in step of 2)
+        if len(ctr) < 5: #if not enough contours are produced
+            ctr=np.power(chansig,np.arange(1,maxsig,1)) #contours level in units of nsigma^i (i from 1 to max sigma in step of 1)
+        if len(ctr) < 5: #if still not enough contours are produced
+            ctr=np.power(chansig,np.arange(1,maxsig,0.5)) #contours level in units of nsigma^i (i from 1 to max sigma in step of 0.5)
     else:
         ctr=contours #use the levels given in input
-        
+    if verbose:
+        ctrtoHI=converttoHI(ctr*rms,beamarea=beamarea,pixunits='arcsec',spectralres=spectralres,specunits='km/s')
+        print('Contours level: {} cm⁻²'.format([ '%.1e' % elem for elem in ctrtoHI]))
     # NOW WE DO THE PLOT # 
     for i in range(nrows):
         for j in range(ncols):
@@ -647,12 +605,12 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
             chanmap=data[chans[k],ymin:ymax,xmin:xmax] #select the channel
             im=ax.imshow(chanmap,cmap='Greys',norm=norm,aspect='equal') #plot the channel map in units of detection limit
             if chanmask: #if a mask must be used
-                ax.contour(chanmap/rms,levels=ctr,cmap='Greys_r',linewidths=ctr_width/2,linestyles='solid') #add the contours
+                ax.contour(chanmap/rms,levels=ctr,cmap='gnuplot',linewidths=ctr_width/2,linestyles='solid') #add the contours
                 ax.contour(chanmap/rms,levels=-np.flip(ctr),colors='gray',linewidths=ctr_width/2,linestyles='dashed') #add the negative contours
-                ax.contour(chanmap*mask[chans[k],ymin:ymax,xmin:xmax]/rms,levels=ctr,cmap='Greys_r',linewidths=ctr_width,linestyles='solid') #add the contours within the mask
+                ax.contour(chanmap*mask[chans[k],ymin:ymax,xmin:xmax]/rms,levels=ctr,cmap='gnuplot',linewidths=ctr_width,linestyles='solid') #add the contours within the mask
             else:
-                ax.contour(chanmap/rms,levels=ctr,cmap='Greys_r',linewidths=ctr_width,linestyles='solid') #add the contours
-                ax.contour(chanmap/rms,levels=-np.flip(ctr),colors='gray',linewidths=kwargs['ctr_width'],linestyles='dashed') #add the negative contours
+                ax.contour(chanmap/rms,levels=ctr,cmap='gnuplot',linewidths=ctr_width,linestyles='solid') #add the contours
+                ax.contour(chanmap/rms,levels=-np.flip(ctr),colors='gray',linewidths=ctr_width,linestyles='dashed') #add the negative contours
             ax.tick_params(direction='in') #change the ticks of the axes from external to internal
             ax.set_xlabel('RA') #set the x-axis label
             ax.set_ylabel('DEC') #set the y-axis label
@@ -662,7 +620,7 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
                ax.coords[0].set_ticklabel_visible(False) #hide the x-axis ticklabels and labels
             ax.set_xlim(xlim) #set the xlim
             ax.set_ylim(ylim) #set the ylim
-            ax.text(leftmargin,bottommargin,'V$_{{rad}}$: {:.2f} km/s'.format(chans[k]*spectralres+chan0-vsys),transform=ax.transAxes) #add the information of the channel velocity
+            ax.text(leftmargin,bottommargin,'V$_{{rad}}$: {:.1f} km/s'.format(chans[k]*spectralres+chan0-vsys),transform=ax.transAxes) #add the information of the channel velocity
             if pixelres is not None and bmaj is not None and bmin is not None and bpa is not None: #if the pixel resolution and the beam is given
                 pxbeam=np.array([bmaj,bmin])/pixelres #beam in pixel
                 box=patch.Rectangle((xlim[1]-2*pxbeam[0],ylim[0]),2*pxbeam[0],2*pxbeam[1],fill=None) #create the box for the beam. The box start at the bottom and at twice the beam size from the right edge and is twice the beam large. So, the beam is enclosed in a box that extend a beam radius around the beam patch
@@ -725,6 +683,11 @@ def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,cutbox
         datacube (string): name or path+name of the fits data cube if cubedo is not given
         path (string): path to the data cube if the datacube is a name and not a path+name
         mom1map (string): name or path+name of the fits moment 1 map to be used for operation shuffle
+        specunits (string): string with the spectral units for operation mom0 and shuffle (Default: m/s). Accepted values:
+            - km/s
+            - m/s
+            - Hz
+        spectralres (float): cube spectral resolution in specunits for operation mom0 and shuffle (Default: None)
         mask2d (string): name or path+name of the fits 2D mask for operation clip. Used if withmask=True
         maskcube (string): name or path+name of the fits 3D mask cube for operation mom0. Used if withmask=True
         verbose (bool): option to print messages to terminal if True (Default: False)
@@ -762,11 +725,11 @@ def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,cutbox
     if indir == '' or indir is None: #if the input folder is not given
         if 'path' in kwargs: #if the path to the data cube is in kwargs
             if kwargs['path'] == '' or kwargs['path'] is None:
-                raise ValueError('ERROR: no path to the data cube is set: aborting!')
+                raise ValueError('ERROR: no path to the data is set: aborting!')
             else:
                 indir=kwargs['path']
         else:
-            raise ValueError('ERROR: no path to the data cube is set: aborting!')
+            raise ValueError('ERROR: no path to the data is set: aborting!')
     elif not os.path.exists(indir): #if the input folder does not exist
         os.makedirs(indir) #create the folder
     if datacube[0] != '.': #if the data cube name start with a . means that it is a path to the cube (so differs from path parameter)
@@ -783,10 +746,10 @@ def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,cutbox
         else:
             raise ValueError("ERROR: selected operation is '{}' but no velocity field is provided: aborting!".format(operation))
     if operation in ['mom0','shuffle']: #if the datacube must be shuffled or the moment 0 map created
-        if 'spectralres' in kwargs: #if the spectral resolution is in kwargs
-            spectralres=kwargs['spectralres'] #store the spectral resolution from the input parameters
-        else:
-            raise ValueError("ERROR: selected operation is '{}' but no spectral resolution is provided: aborting!".format(operation))
+        specunits=kwargs['specunits'] if 'specunits' in kwargs else 'm/s' #store the spectral units from the input paramaters
+        spectralres=kwargs['spectralres'] if 'spectralres' in kwargs else None
+        if spectralres is None: #if no spectral resolution is provided
+            raise ValueError("ERROR: selected operation is '{}' but no spectral resolution is provided: aborting!".format(operation)) #store the spectral resolution from the input parameters if available
     if operation in ['clip']:  #if the datacube must be clipped
         usemask=withmask #store the use mask switch from the input parameters
         if usemask: #if a 2D mask is used
@@ -838,6 +801,7 @@ def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,cutbox
     with fits.open(datacube,mode=mode) as cube: #open the datacube
         #------------   BLANK     ------------#  
         if operation == 'blank': #if the datacube must be blanked
+            data=cube[0].data.copy() #import the data from the data cube
             #WE CHECK THE CHANNELS
             if chanmin is None or chanmin < 0: #if not given or less than 0
                 warnings.warn('Starting channel wrongly set. You give {} but should be at least 0. Set to 0'.format(chanmin))
@@ -976,6 +940,7 @@ def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,cutbox
         
         #------------   MOM0     ------------# 
         if operation == 'mom0': #if the moment 0 map must be computed
+            data=cube[0].data.copy() #import the data from the data cube
             if usemask: #if a mask is used
                 with fits.open(maskcube) as Mask:
                     mask=Mask[0].data #open the 3D mask
@@ -1010,7 +975,7 @@ def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,cutbox
                 specunits='m/s' #set the first channel to 0 km/s
                 if verbose:
                     warnings.warn('No spectral unit was found: spectral unit set to m/s!')
-            data=np.nansum(cube[0].data[chanmin:chanmax,:],axis=0)*spectralres #calculate the moment 0 map
+            moment0=np.nansum(data[chanmin:chanmax,:],axis=0)*spectralres #calculate the moment 0 map
             wcs=WCS(cube[0].header,naxis=2) #store the WCS
             header=wcs.to_header() #convert the WCS into a header
             if 'BUNIT' in cube[0].header: #if the spectral unit is in the header
@@ -1019,7 +984,7 @@ def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,cutbox
                 header['BUNIT']='Jy/beam*m/s' #set the first channel to 0 km/s
                 if verbose:
                     warnings.warn('No flux unit was found: flux density unit set to Jy/beam*m/s!')
-            hdu=fits.PrimaryHDU(data.astype('float32'),header=header) #create the primary HDU
+            hdu=fits.PrimaryHDU(moment0.astype('float32'),header=header) #create the primary HDU
             mom0=fits.HDUList([hdu]) #make the HDU list
             mom0.writeto(outname,overwrite=True) #save the moment 0 map
             return #exit the function
@@ -1028,29 +993,11 @@ def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,cutbox
         if operation == 'shuffle': #if the cube must be shuffled
             with fits.open(mom1map) as m1: #open the moment 1 map
                 mom1=m1[0].data #store the velocity field
-                if m1[0].header['BUNIT'] == 'm/s': #if the units are m/s
-                    mom1=mom1/1000 #convert to km/s
-            data=cube[0].data*np.nan #initialize the shuffled cube
-            header=cube[0].header #store the header
-            if spectralres is None:
-                if 'CDELT3' in header: #if the header has the starting spectral value
-                    spectralres=header['CDELT3'] #store the starting spectral value
-                else:
-                    raise ValueError('ERROR: no spectral resolution was found: aborting')
-            if 'CRVAL3' in header: #if the header has the starting spectral value
-                v0=header['CRVAL3'] #store the starting spectral value
+            data=cube[0].data.copy()*np.nan #initialize the shuffled cube
+            if 'CRVAL3' in cube[0].header: #if the header has the starting spectral value
+                v0=cube[0].header['CRVAL3'] #store the starting spectral value
             else:
-                v0=0 #set the first channel to 0 km/s
-                if verbose:
-                    warnings.warn('No spectral information was found: starting velocity set to 0 km/s!')
-            if 'CUNIT3' in header: #if the spectral unit is in the header
-                specunits=header['CUNIT3'] #store the spectral unit
-            else:
-                specunits='m/s' #set the first channel to 0 km/s
-                if verbose:
-                    warnings.warn('No spectral unit was found: spectral unit set to m/s!')
-            if specunits == 'm/s': #if the spectral units are m/s
-                v0=v0/1000 #convert the starting velocity to km/s
+                raise ValueError('No starting channel value found: Aborting!')
             nchan=data.shape[0] #store the number of channels
             v=np.arange(v0,v0+nchan*spectralres,spectralres) #define the spectral axis
             X=np.where(~np.isnan(mom1))[1] #store the non-NaN x coordinates
@@ -1065,7 +1012,7 @@ def cubedo(cubedo='',cubedoindir='',operation=None,chanmin=0,chanmax=None,cutbox
                     else:
                         data[z,y,x]=cube[0].data[n,y,x] #perform the shuffle           
             cube[0].data=data #store the shuffle data
-            cube[0].header['CRPIX3']=cen #update the header so that the velocity axis is 0 at the pixel at which profiles have been centred
+            cube[0].header['CRPIX3']=cen+1 #update the header so that the velocity axis is 0 at the pixel at which profiles have been centred. +1 is needed for account the stupid python 0-counting
             cube[0].header['CRVAL3']=0. #update the header so that the velocity axis is 0 at the pixel at which profiles have been centred
             
         #------------   TOINT     ------------#     
@@ -1129,50 +1076,21 @@ def cubestat(datacube='',**kwargs):
         else:
             raise ValueError('ERROR: no path to the data cube is set: aborting!')
     #CHECK THE KWARGS#
-    if 'pixunits' in kwargs: #if the spatial units are in the input kwargs
-        pixunits=kwargs['pixunits'] #store the spatial units from the input kwargs
-    else:
-        pixunits=None #set it to None   
-    if 'specunits' in kwargs: #if the spectral units are in the input kwargs
-        specunits=kwargs['specunits'] #store the spectral units from the input kwargs
-    else:
-        specunits=None #set it to None   
-    if 'fluxunits' in kwargs: #if the flux units are in the input kwargs
-        fluxunits=kwargs['fluxunits'] #store the flux units from the input kwargs
-    else:
-        fluxunits=None #set it to None   
-    if 'pixelres' in kwargs: #if the pixel resolution is in the input kwargs
-        pixelres=kwargs['pixelres'] #store the pixel resolution from the input kwargs
-    else:
-        pixelres=None #set it to None
-    if 'spectralres' in kwargs: #if the spectral resolution is in the input kwargs
-        spectralres=kwargs['spectralres'] #store the spectral resolution from the input kwargs
-    else:
-        spectralres=None #set it to None
-    if 'bmaj' in kwargs: #if the beam major axis is in the input kwargs
-        bmaj=kwargs['bmaj'] #store the beam major axis from the input kwargs
-    else:
-        bmaj=None #set it to None
-    if 'bmin' in kwargs: #if the beam minor axis is in the input kwargs
-        bmin=kwargs['bmin'] #store the beam minor axis from the input kwargs
-    else:
-        bmin=None #set it to None
-    if 'bpa' in kwargs: #if the beam position angle is in the input kwargs
-        bpa=kwargs['bpa'] #store the beam position angle from the input kwargs
-    else:
-        bpa=None #set it to None
-    if 'rms' in kwargs: #if the cube rms is provided
-        rms=kwargs['rms'] #store the rms from the input kwargs
-    else:
-        rms=None #set it to None
-    if 'nsigma' in kwargs: #if the sigma-threshold for the detection limit is in kwargs
-        nsigma=kwargs['nsigma'] #store it from input kwargs
-    else:
-        nsigma=3 #set it to 3
-    if 'verbose' in kwargs: #check if the verbose option is in kwargs
-        verbose=kwargs['verbose'] #store the verbose option from the input kwargs
-    else:
-        verbose=False #set it to False
+    pixunits=kwargs['pixunits'] if 'pixunits' in kwargs else None
+    if pixunits not in [None,'deg','arcmin','arcsec']: #if wrong spatial units are given
+        raise ValueError('ERROR: Please provide the spatial units in deg, arcmin or arcsec. Aborting!')
+    specunits=kwargs['specunits'] if 'specunits' in kwargs else None
+    if specunits not in [None,'km/s','m/s','Hz']: #if wrong spatial units are given
+        raise ValueError('ERROR: Please provide the spectral units km/s, m/s or Hz. Aborting!')   
+    fluxunits=kwargs['fluxunits'] if 'fluxunits' in kwargs else None
+    pixelres=kwargs['pixelres'] if 'pixelres' in kwargs else None
+    spectralres=kwargs['spectralres'] if 'spectralres' in kwargs else None
+    bmaj=kwargs['bmaj'] if 'bmaj' in kwargs else None
+    bmin=kwargs['bmin'] if 'bmin' in kwargs else None
+    bpa=kwargs['bpa'] if 'bpa' in kwargs else None
+    rms=kwargs['rms'] if 'rms' in kwargs else None
+    nsigma=kwargs['nsigma'] if 'nsigma' in kwargs else 3
+    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
 
     #---------------   START THE FUNCTION   ---------------#
     with fits.open(datacube) as cube: #open the data cube
@@ -1273,8 +1191,8 @@ def cubestat(datacube='',**kwargs):
         name=datacube.split('/')[-1] #extract the cube name from the datacube variable
         coldenunits='cm\u207B\u00B2' #units of the column density
         print('Noise statistic of the cube {}:'.format(name))
-        print('The median rms per channel is: {:.2e} {}'.format(rms,fluxunits))
-        print('The {}\u03C3 1-channel detection limit is: {:.2e} {} i.e., {:.2e} {}'.format(int(nsigma),nsigma*rms,fluxunits,sensitivity,coldenunits))
+        print('The median rms per channel is: {:.1e} {}'.format(rms,fluxunits))
+        print('The {}\u03C3 1-channel detection limit is: {:.1e} {} i.e., {:.1e} {}'.format(int(nsigma),nsigma*rms,fluxunits,sensitivity,coldenunits))
     return result
 
 #############################################################################################
@@ -1381,10 +1299,7 @@ def fixmask(refcube='',masktofix='',fixmaskindir='',fixmaskoutdir='',fixmaskoutn
         ValueError: If no mask cube is provided
     """
     #CHECK THE INPUT#
-    if 'verbose' in kwargs: #check if the verbose option is in kwargs
-        verbose=kwargs['verbose'] #store the verbose option from the input kwargs
-    else:
-        verbose=False #set it to False
+    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
     datacube=refcube #store the data cube path from the input parameters
     if datacube == '' or datacube is None: #if a data cube is not given
         if 'datacube' in kwargs: #if the datacube is in kwargs
@@ -1442,21 +1357,21 @@ def fixmask(refcube='',masktofix='',fixmaskindir='',fixmaskoutdir='',fixmaskoutn
             Maskcube.writeto(outname,overwrite=True) #write the new mask
         
 #############################################################################################
-def gaussfit(cubetofit='',gaussmask='',gaussindir='',spectralres=None,linefwhm=15,amp_thresh=0,p_reject=1,
-             clipping=False,threshold=0.5,errors=False,gaussoutdir='',gaussoutname='',**kwargs):
+def gaussfit(cubetofit='',gaussmask='',gaussindir='',linefwhm=15,amp_thresh=0,p_reject=1,
+             clipping=False,threshold=0.5,errors=False,write_field=False,gaussoutdir='',gaussoutname='',**kwargs):
     """Fit a gaussian profile to each spaxel of a cube based on a source-finding-produced mask.
 
     Args:
         cubetofit (string):name or path+name of the fits data cube to be fitted
         gaussmask (string): name or path+name of the fits 2D mask to be used in the fit
         gaussindir (string):name of the inpt directory
-        spectralres (float): data spectral resolution in specunits
         linefwhm (float): first guess on the fwhm of the line profile in km/s
         amp_thresh (float): amplitude threshold for the fit. If a profile peak is < threshold, the fit wont be performed on that spectrum
         p-reject (float): p-value threshold for fit rejection. If a best-fit has p > p-reject, it will be rejected
         clipping (bool): clip the spectrum to a % of the profile peak if True
         threshold (float): clip threshold as % of the peak (0.5 is 50%). Used if clipping is True
         errors (bool): compute the errors on the best-fit if True
+        write_field (bool): compute the velocity field if True
         gaussoutdir (string): output folder name
         gaussoutname (string): output file name
     
@@ -1464,6 +1379,11 @@ def gaussfit(cubetofit='',gaussmask='',gaussindir='',spectralres=None,linefwhm=1
         datacube (string): name or path+name of the fits data cube if cubetofit is not given
         mask2d (string): name or path+name of the fits 2D mask if gaussmask is not given
         path (string): path to the data cube if the datacube is a name and not a path+name
+        specunits (string): string with the spectral units for operation mom0 and shuffle (Default: m/s). Accepted values:
+            - km/s
+            - m/s
+            - Hz
+        spectralres (float): data spectral resolution in specunits
         verbose (bool): option to print messages to terminal if True (Default: False)
  
     Returns:
@@ -1472,27 +1392,12 @@ def gaussfit(cubetofit='',gaussmask='',gaussindir='',spectralres=None,linefwhm=1
     Raises:
         ValueError: If no data cube is provided
         ValueError: If no path is provided
-        ValueError: If mask cube and data cube dimensions do not match
+        ValueError: If mask cube and data cube dimensiosns do not match
         ValueError: If no spectral information is available through the input arguments or the cube header
     """
     #CHECK THE INPUT#
-    if 'verbose' in kwargs: #check if the verbose option is in kwargs
-        verbose=kwargs['verbose'] #store the verbose option from the input kwargs
-    else:
-        verbose=False #set it to False
+    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
     datacube=cubetofit #store the data cube path from the input parameters
-    if datacube == '' or datacube is None: #if a data cube is not given
-        if 'datacube' in kwargs: #if the datacube is in kwargs
-            if kwargs['datacube'] == '' or kwargs['datacube'] is None:
-                raise ValueError('ERROR: datacube is not set: aborting!')
-            else:
-                datacube=kwargs['datacube'] #store the default data cube path from the input kwargs
-        else:
-            raise ValueError('ERROR: datacube is not set: aborting!')
-    mask2d=gaussmask #store the 2D mask path from the input parameters
-    if mask2d == '' or mask2d is None: #if a 2D mask is not given
-        if 'mask2d' in kwargs: #if the 2D mask is in kwargs
-            mask2d=kwargs['mask2d'] #store the default data cube path from the input kwargs
     indir=gaussindir #store the input folder from the input parameters
     if indir == '' or indir is None: #if the input folder is not given
         if 'path' in kwargs: #if the path to the data cube is in kwargs
@@ -1504,9 +1409,21 @@ def gaussfit(cubetofit='',gaussmask='',gaussindir='',spectralres=None,linefwhm=1
             raise ValueError('ERROR: no path to the data cube is set: aborting!')
     elif not os.path.exists(indir): #if the input folder does not exist
         os.makedirs(indir) #create the folder
-    if datacube[0] != '.': #if the data cube name start with a . means that it is a path to the cube (so differs from path parameter)
+    if datacube == '' or datacube is None: #if a data cube is not given
+        if 'datacube' in kwargs: #if the datacube is in kwargs
+            if kwargs['datacube'] == '' or kwargs['datacube'] is None:
+                raise ValueError('ERROR: datacube is not set: aborting!')
+            else:
+                datacube=kwargs['datacube'] #store the default data cube path from the input kwargs
+        else:
+            raise ValueError('ERROR: datacube is not set: aborting!')
+    elif datacube[0] != '.': #if the data cube name start with a . means that it is a path to the cube (so differs from path parameter)
         datacube=indir+datacube
-    if mask2d[0] != '.': #if the 2D mask name start with a . means that it is a path to the mask (so differs from path parameter)
+    mask2d=gaussmask #store the 2D mask path from the input parameters
+    if mask2d == '' or mask2d is None: #if a 2D mask is not given
+        if 'mask2d' in kwargs: #if the 2D mask is in kwargs
+            mask2d=kwargs['mask2d'] #store the default data cube path from the input kwargs
+    elif mask2d[0] != '.': #if the 2D mask name start with a . means that it is a path to the mask (so differs from path parameter)
         mask2d=indir+mask2d
     outdir=gaussoutdir #store the output folder from the input parameters
     if outdir == '' or outdir is None:  #if the outdir is empty
@@ -1518,6 +1435,8 @@ def gaussfit(cubetofit='',gaussmask='',gaussindir='',spectralres=None,linefwhm=1
         outname=datacube.replace('.fits','_gaussfit.fits')  #the outname is the object name plus chanmap.pdf
     if outname[0] != '.': #if the outname name start with a . means that it is a path to the cube (so differs from path parameter)
         outname=outdir+outname
+    specunits=kwargs['specunits'] if 'specunits' in kwargs else 'm/s' #store the spectral units from the input paramaters
+    spectralres=kwargs['spectralres'] if 'spectralres' in kwargs else None #store the spectral resolution from the input paramaters
     
     #---------------   START THE FUNCTION   ---------------#
     with fits.open(datacube) as cube: #open the data cube
@@ -1531,16 +1450,22 @@ def gaussfit(cubetofit='',gaussmask='',gaussindir='',spectralres=None,linefwhm=1
                 if mask.shape[0] != data.shape[1] or  mask.shape[1] != data.shape[2]: #if the mask cube has different size than the data cube
                     raise ValueError('ERROR: mask and data cube has different spatial shapes: {} the mask and ({},{}) the data cube. Aborting!'.format(mask.shape,data.shape[1],data.shape[2]))
         model_cube=data.copy()*0 #initialize the model cube as zeros
-        
+        if write_field: #if the velocity field whould be computed
+            field=np.empty((data.shape[1],data.shape[2]))*np.nan #initialize the velocity field
+            
         #WE CHECK THE REQUIRED INFORMATION#
-        if spectralres is None and 'CDELT3' in header: #if the spectral resolution is not given but is in the header
-            spectralres=header['CDELT3'] #store the spectral resolution from the cube header
-        else:
-            raise ValueError('ERROR: no spectral resolution is provided or found. Aborting!')
+        if spectralres is None: #if the spectral resolution is not given
+            if 'CDELT3' in header: #but it is in the header
+                spectralres=header['CDELT3'] #store the spectral resolution from the cube header
+            else:
+                raise ValueError('ERROR: no spectral resolution is provided or found. Aborting!')
         if 'CRVAL3' in header: #if the header has the starting spectral value
             v0=header['CRVAL3'] #store the starting spectral value
         else:
             raise ValueError('ERROR: no spectral value for starting channel was found. Aborting!')
+        if specunits == 'm/s': #if the spectral units are m/s
+            spectralres=spectralres/1000 #convert the spectral resolution to km/s
+            v0=v0/1000 #convert the starting velocity to km/s
             
         #WE PREPARE THE SPECTRAL AXIS#
         nchan=np.shape(data)[0] #store the number of channels
@@ -1557,6 +1482,13 @@ def gaussfit(cubetofit='',gaussmask='',gaussindir='',spectralres=None,linefwhm=1
         y=np.where(mask > 0)[1] #store the y coordinate of the non-masked pixels
         
         #WE START THE FITTING ROUTINE#
+        if verbose:
+            print('Starting the Gaussian fit with the following parameters:\n'
+            'Spectral resolution: {} km/s\n'
+            'Starting velocity: {} km/s\n'
+            'First-guess FWHM: {} km/s\n'
+            'Amplitude threshold: {}\n'
+            'p-value for rejection: {}'.format(spectralres,v0,linefwhm,amp_thresh,p_reject))
         for i,j in zip(x,y): #run over the pixels
             spectrum=data[:,i,j].copy() #extract the spectrum
             peak=np.nanmax(spectrum) #define the peak of the gaussian as the maximum of the spectrum
@@ -1581,9 +1513,21 @@ def gaussfit(cubetofit='',gaussmask='',gaussindir='',spectralres=None,linefwhm=1
                     p_value=statchi2.cdf(chi2,dof) #calculate the p-value
                     if p_value<=p_reject: #if the p-value is less than p
                         model_cube[:,i,j]=total_fit(v) #store the result in the model cube
+                        if write_field: #if the velocity field whould be computed
+                            field[i,j]=total_fit.mean.value #store the best-fit peak value
             
         cube[0].data=model_cube #copy the model cube into the data cube
         cube.writeto(outname,overwrite=True) #save the model cube 
+    
+    if write_field: #if the velocity field whould be computed
+        wcs=WCS(header).dropaxis(2) #store the wcs
+        h=wcs.to_header() #convert the wcs into a header
+        h['BUNIT']=(specunits,'Best-fit peak velocities') #add the BUNIT keyword
+        if specunits == 'm/s': #if the spectral units are m/s
+            field=field*1000 #reconvert the velocoty into m/s
+        hdu=fits.PrimaryHDU(field,header=h) #create the primary HDU
+        vfield=fits.HDUList([hdu]) #make the HDU list
+        vfield.writeto(outname.replace('.fits','_vel.fits'),overwrite=True) #save the velocity field
         
 #############################################################################################
 def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=None,pvoutdir='',
@@ -1607,20 +1551,24 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
     Kwargs:
         datacube (string): name or path+name of the fits data cube if pvcube is not given
         path (string): path to the data cube if the datacube is a name and not a path+name
-        spectralres (float): cube spectral resolution in km/s
+        pixunits (string): string with the spatial units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
+            - deg
+            - armin
+            - arcsec
+        pixelres (float): cube spatial resolution in pixunits (Default: None)
         bmaj (float): beam major axis in arcsec
         pa (float): object position angle in degree
         pvsig (float): lowest contour level in terms of pvsig*rms
-        pixelres (float): pixel resolution of the data in arcsec
         figure (bool): create a plot figure if True
         position (int): position of the subplot in the figure as triplet of integers (111 = nrow 1, ncol 1, index 1)
-        vsys (float): object systemic velocity in km/s
+        vsys (float): object systemic velocity in m/s
         rms (float): rms of the data cube in Jy/beam as a float. If not given (None), the function tries to calculate it
         asectokpc (float): arcsec to kpc conversion to plot the spatial scale
         objname (string): name of the object
         subtitle (string): subtitle of the pv plot
         lim (list/array): list or array of plot x and y limits as [xmin,xmax,ymin,ymax]. They will replace the default limits
-        pv_ctr (list/array): contours level. They will replace the default levels                                    
+        pv_ctr (list/array): contour levels in units of rms. They will replace the default levels                                    
         ctr_width (float): line width of the contours
         verbose (bool): option to print messages and plot to terminal if True   
 
@@ -1637,10 +1585,7 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
         ValueError: If no output folder is given
     """
     #CHECK THE INPUT#
-    if 'verbose' in kwargs: #check if the verbose option is in kwargs
-        verbose=kwargs['verbose'] #store the verbose option from the input kwargs
-    else:
-        verbose=False #set it to False
+    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
     datacube=pvcube #store the data cube path from the input parameters
     if datacube == '' or datacube is None: #if a data cube is not given
         if 'datacube' in kwargs: #if the datacube is in kwargs
@@ -1666,7 +1611,7 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
                 warnings.warn('Beam major axis not set. Pv width will be 1 pixel!')
                 pvwidth=1
             else:
-                pvwidth=kwargs['bmaj']*u.arcsec #store the beam major axis from the input kwargs
+                pvwidth=kwargs['bmaj'] #store the beam major axis from the input kwargs
         else:
             warnings.warn('Beam major axis not set. Pv width will be 1 pixel!')
             pvwidth=1
@@ -1717,56 +1662,21 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
     if plotoutname == '' or plotoutname is None:  #if the outname is empty
         plotoutname=datacube.replace('.fits','_pvslice.pdf') #the outname is the object name plus'_pvslice.fits
     #CHECK THE KWARGS#
-    if 'pvsig' in kwargs: #if the nsigma for the detection limit as nsigma*rms is in the input kwargs
-        pvsig=kwargs['pvsig'] #store the nsigma for the detection limit as nsigma*rms from the input kwargs
-    else:
-        pvsig=3 #set it to 3
-    if 'pixelres' in kwargs: #if the pixel resolution is in the input kwargs
-        pixelres=kwargs['pixelres'] #store the pixel resolution from the input kwargs
-    else:
-        pixelres=None #set it to None
-    if 'figure' in kwargs: #if the do figure option is in the input kwargs
-        figure=kwargs['figure'] #store the do figure option from the input kwargs
-    else:
-        figure=False #set it to False
-    if 'position' in kwargs: #if the subplot position is in the input kwargs
-        position=kwargs['position'] #store the subplot position from the input kwargs
-    else:
-        position=111 #set it to 111
-    if 'rms' in kwargs: #if the rms is in the input kwargs
-        rms=kwargs['rms'] #store the rms from the input kwargs
-    else:
-        rms=None #set it to None
-    if 'vsys' in kwargs: #if the systemic velocity is in the input kwargs
-        vsys=kwargs['vsys'] #store the systemic velocity from the input kwargs
-    else:
-        vsys=None #set it to None
-    if 'asectokpc' in kwargs: #if the arcsec-to-kpc conversion is in the input kwargs
-        asectokpc=kwargs['asectokpc'] #store the arcsec-to-kpc conversion from the input kwargs
-    else:
-        asectokpc=None #set it to None
-    if 'objname' in kwargs: #if the object name is in the input kwargs
-        objname=kwargs['objname'] #store the object name from the input kwargs
-        if objname is None: #if in kwargs but not set
-            objname='' #set it to empty
-    else:
+    pvsig=kwargs['pvsig'] if 'pvsig' in kwargs else 3
+    pixunits=kwargs['pixunits'] if 'pixunits' in kwargs else None
+    pixelres=kwargs['pixelres'] if 'pixelres' in kwargs else None
+    figure=kwargs['figure'] if 'figure' in kwargs else False
+    position=kwargs['position'] if 'position' in kwargs else 111
+    rms=kwargs['rms'] if 'rms' in kwargs else None
+    vsys=kwargs['vsys'] if 'vsys' in kwargs else None
+    asectokpc=kwargs['asectokpc'] if 'asectokpc' in kwargs else None
+    objname=kwargs['objname'] if 'objname' in kwargs else None
+    if objname is None: #if in kwargs but not set
         objname='' #set it to empty
-    if 'subtitle' in kwargs: #if the arcsec-to-kpc conversion is in the input kwargs
-        subtitle=kwargs['subtitle'] #store the arcsec-to-kpc conversion from the input kwargs
-    else:
-        subtitle=None #set it to None
-    if 'lim' in kwargs: #if the plot limits are in the input kwargs
-        lim=kwargs['lim'] #store the plot limits from the input kwargs
-    else:
-        lim=None #set it to None
-    if 'pv_ctr' in kwargs: #if the moment 0 contour levels are in the input kwargs
-        pv_ctr=kwargs['pv_ctr'] #store the moment 0 contour levels from the input kwargs
-    else:
-        pv_ctr=None #set it to None
-    if 'ctr_width' in kwargs: #if the contours width is in the input kwargs
-        ctr_width=kwargs['ctr_width'] #store the contours width from the input kwargs
-    else:
-        ctr_width=2 #set it to 2   
+    subtitle=kwargs['subtitle'] if 'subtitle' in kwargs else None
+    lim=kwargs['lim'] if 'lim' in kwargs else None
+    pv_ctr=kwargs['pv_ctr'] if 'pv_ctr' in kwargs else None
+    ctr_width=kwargs['ctr_width'] if 'ctr_width' in kwargs else 2
 
     #---------------   START THE FUNCTION   ---------------#
     with fits.open(datacube) as cube: #open the data cube
@@ -1775,22 +1685,40 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
     wcs=WCS(header) #store the wcs information
     
     #WE CHECK IF THE REQUIRED INFORMATION ARE PROVIDED#
-    #-----------   SPATIAL AXIS    -----------#
-    if pixelres is None: #if the pixelres is not given
-        if 'CUNIT1' in header: #if the spatial unit is in the header
-            spaceunits=header['CUNIT1'] #store the spatial unit
-            if 'CDELT1' in header: #if the spatial resolution is in the header
-                spaceres=abs(header['CDELT1']) #store the spatial resolution from the header
-                if spaceunits == 'deg': #if the spatial unit is degree
-                    pixelres=spaceres*3600 #convert into arcsec
-                elif spaceunits == 'arcmin': #if the spatial unit is arcmin
-                    pixelres=spaceres*60 #convert into arcsec
-                elif spaceunits == 'arcsec': #if the spatial unit is arcsec
-                    pixelres=spaceres #do nothing
-        elif verbose:
+    #------------   SPATIAL UNITS     ------------#
+    if pixunits is None and 'CUNIT1' in header: #if no spatial units are given and the keyword is in the header
+        pixunits=header['CUNIT1']#store the spatial units from the cube header
+    elif pixunits is None and 'CUNIT2' in header: #if no spatial units are given and the keyword is in the header
+        pixunits=header['CUNIT2']#store the spatial units from the cube header
+    elif pixunits is None:
+        pixunits='deg' #set them to deg
+        if verbose:
+            warnings.warn('No spatial units were found: spatial units set to deg!')
+    #------------   SPATIAL RESOLUTION     ------------#
+    if pixelres is None and 'CDELT1' in header: #if the spatial resolution is not given and the keyword is in the header
+        pixelres=header['CDELT1'] #store the spatial resolution from the cube header
+    elif pixelres is None and 'CDELT2' in header: #if the spatial resolution is not given and the keyword is in the header
+        pixelres=header['CDELT2'] #store the spatial resolution from the cube header
+    elif pixelres is None and verbose:
             warnings.warn('No spatial unit was found: unable to calculate the pixel resolution! Path length set to 0.5 deg')
-    
+    if pixelres is not None: #if the pixel resolution is available
+        if pixunits == 'deg': #if the spatial unit is degree
+            pixelres=pixelres*3600 #convert into arcsec
+        elif pixunits == 'arcmin': #if the spatial unit is arcmin
+            pixelres=pixelres*60 #convert into arcsec
+        elif pixunits == 'arcsec': #if the spatial unit is arcsec
+            pixelres=pixelres #do nothing
+    if pixelres < 0: #if the pixel resolution is negative
+        pixelres=-pixelres #convert to positive
+
     #WE DEFINE THE PATH OF THE SLICE#
+    if pixunits == 'deg': #if the spatial unit is degree
+        pvwidth=pvwidth*3600*u.arcsec #convert into arcsec
+    elif pixunits == 'arcmin': #if the spatial unit is arcmin
+        pvwidth=pvwidth*60*u.arcsec #convert into arcsec
+    elif pixunits == 'arcsec': #if the spatial unit is arcsec
+        pvwidth=pvwidth*u.arcsec #do nothing    
+        
     if from_center: #if the slice type is from the center
         if pixelres is None: #if no pixel resolution is given
             length=0.5*u.degree #define the length of the slice as the size of the image
@@ -1812,7 +1740,22 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
     elif chmax < chmin: #if the higher channel is less than the lower
         warnings.warn('Last channel ({}) lower than starting channel ({}). Last channel set to {}.'.format(chmax,chmin,data.shape[0]))
         chmax=data.shape[0] #set to the max channel
-        
+    
+    if verbose:
+        if from_center:
+            print('Extracting the pv slice with the following parameters:\n'
+            'Spatial resolution: {:.1f} arcsec\n'
+            'Path length: {:.1f} arcsec\n'
+            'Path position angle: {:.1f} deg\n'
+            'Path width: {:.1f} arcsec\n'
+            'From channel {} to channel {}\n'
+            '-------------------------------------------------'.format(pixelres,length,pvangle,pvwidth,chmin,chmax))
+        else:
+            print('Extracting the pv slice with the following parameters:\n'
+            'Spatial resolution: {:.1f} arcsec\n'
+            'Path width: {:.1f} arcsec\n'
+            'From channel {} to channel {}\n'
+            '-------------------------------------------------'.format(pixelres,pvwidth,chmin,chmax))
     #WE EXTRACT THE PVSLICE AND REFER THE SPATIAL AXIS TO THE SLICE CENTER#    
     pv=extract_pv_slice(data[chmin:chmax,:,:],pvpath,wcs=wcs[chmin:chmax,:,:]) #extract the pv slice
     pv.header['CRPIX1']=round(pv.header['NAXIS1']/2)+1 #fix the header in order to have the distance from the center as spatial dimension
@@ -1859,12 +1802,12 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
         #WE DEFINE THE CONTOURS#
         if pv_ctr is None: #if no contour levels are provided
             ctr=np.power(pvsig,np.arange(1,9,2)) #4 contours level between nsigma and nsigma^8
-            if verbose:
-                print('Contours level: {} Jy/beam'.format(ctr*rms))
         else:
             ctr=pv_ctr #use those in input
+        if verbose:
+            print('Contours level: {} Jy/beam'.format(ctr*rms))
         #WE DO THE PLOT#
-        im=ax.imshow(data,cmap='Greys',norm=norm,aspect='auto') #plot the pv slice in units of rms
+        im=ax.imshow(data,cmap='Greys',norm=norm,aspect='auto') #plot the pv slice
         ax.tick_params(direction='in') #change the ticks of the axes from external to internal
         ax.set_xlim(xlim) #set the xlim
         ax.set_ylim(ylim) #set the ylim
@@ -1873,13 +1816,13 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
         ax.coords[0].set_format_unit(u.arcmin) #convert x units to arcmin
         ax.set_xlabel('Offset from center [arcmin]') #set the x-axis label
         ax.set_ylabel('Velocity [km/s]') #set the y-axis label
-        ax.axvline(x=pv.header['CRPIX1'],linestyle='-.',color='black') #draw the galactic center line
+        ax.axvline(x=pv.header['CRPIX1']-1,linestyle='-.',color='black') #draw the galactic center line.-1 is due to python stupid 0-couting
         #WE ADD THE CONTOURS#
         ax.contour(data/rms,levels=ctr,cmap='gnuplot',linewidths=ctr_width,linestyles='solid') #add the positive contours
         ax.contour(data/rms,levels=-np.flip(ctr),colors='gray',linewidths=ctr_width,linestyles='dashed') #add the negative contours
         #WE ADD ANCILLARY INFORMATION#
         if vsys is not None: #if the systemic velocity is given
-            if pv.header['CUNIT2']=='m/s': #if the spectral units are m/s
+            if pv.header['CUNIT2']=='km/s': #if the spectral units are km/s
                 vsys=vsys*1000 #convert the systemic velocity into m/s
             ax.axhline(y=((vsys-pv.header['CRVAL2'])/pv.header['CDELT2'])+pv.header['CRPIX2']-1,linestyle='--',color='black') #draw the systemic velocity line. -1 is due to python stupid 0-couting
         else:
@@ -1951,10 +1894,22 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         wcs (astropy.WCS): wcs as astropy.WCS object to use in the plot. It will replace the default one (Default: None)
         position (int): position of the subplot in the figure as triplet of integers (111 = nrow 1, ncol 1, index 1) (Default: 111)
         rms (float): rms of the data cube in Jy/beam as a float. If not given (None), the function tries to calculate it (Default: None)
-        mom0_ctr (list/array): contours level. They will replace the default levels (Default: None)
+        mom0_ctr (list/array): list or array of moment 0 contours level in units of 10^18. They will replace the default levels (Default: None)
+        mom1_ctr (list/array): list or array of moment 1 contours level in units of km/s. They will replace the default levels (Default: None)
+        mom2_ctr (list/array): list or array of moment 2 contours level in units of km/s. They will replace the default levels (Default: None)
         lim (list/array): list or array of plot x and y limits as [xmin,xmax,ymin,ymax]. They will replace the default limits (Default: None)
+        mom0_cmap (string): name of the colormap to be used for the moment 0 map. Accepted values are those of matplotlib.colors.Colormap (see: https://matplotlib.org/stable/tutorials/colors/colormaps.html) (Default: 'Greys')
+        mom1_cmap (string): name of the colormap to be used for the moment 1 map. Accepted values are those of matplotlib.colors.Colormap (see: https://matplotlib.org/stable/tutorials/colors/colormaps.html) (Default: 'jet')
+        mom2_cmap (string): name of the colormap to be used for the moment 2 map. Accepted values are those of matplotlib.colors.Colormap (see: https://matplotlib.org/stable/tutorials/colors/colormaps.html) (Default: 'YlGnBu')
         ctr_width (float): line width of the contours (Default: 2)
+matplotlib.colors.Colormap (see: https://matplotlib.org/stable/tutorials/colors/colormaps.html) (Default: 'Greys')
+        mom0_ctrmap (string): name of the colormap to be used for the moment 0 map contour levels. Accepted values are those of matplotlib.colors.Colormap (see: https://matplotlib.org/stable/tutorials/colors/colormaps.html) (Default: 'gnuplot')
+        mom2_ctrmap (string): name of the colormap to be used for the moment 2 map contour levels. Accepted values are those of matplotlib.colors.Colormap (see: https://matplotlib.org/stable/tutorials/colors/colormaps.html) (Default: 'RdPu_r')
         verbose (bool): option to print messages and plot to terminal if True (Default: False)
+    
+    Imshow_kwargs:
+        all arguments of matplotlib.pyplot.imshow
+        (see https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.imshow.html)
         
     Returns:
         None
@@ -1967,10 +1922,7 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         ValueError: If no data cube is given when use_cube is True
     """
     #CHECK THE INPUT#
-    if 'verbose' in kwargs: #check if the verbose option is in kwargs
-        verbose=kwargs['verbose'] #store the verbose option from the input kwargs
-    else:
-        verbose=False #set it to False
+    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
     if which not in ['all','mom0','mom1','mom2']: #if wrong data is given
         raise ValueError("ERROR: wrong data selection. Accepted values: ['all','mom0','mom1','mom2']. Aborting")
     if which in ['all','mom0']: #if all moment maps must be plotted or only the moment 0
@@ -2064,10 +2016,7 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
     elif outname[0] != '.': #if the outname name start with a . means that it is a path to the cube (so differs from path parameter)
         outname=outdir+outname
     #CHECK THE KWARGS#
-    if 'use_cube' in kwargs: #if the use cube option is in the input kwargs
-        use_cube=kwargs['use_cube'] #store the use cube option from the input kwargs
-    else:
-        use_cube=False #set it to False
+    use_cube=kwargs['use_cube'] if 'use_cube' in kwargs else False
     if use_cube: #if the use cube option is True
         if 'datacube' in kwargs: #check if the data cube is in the kwargs
             datacube=kwargs['datacube'] #store the data cube from the input kwargs
@@ -2083,76 +2032,32 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
                     raise ValueError('ERROR: no path to the data cube is set: aborting!')
         else:
             raise ValueError('ERROR: you set to use a data cube but no data cube is provided: aborting!')
-    if 'pixunits' in kwargs: #if the spatial units are in the input kwargs
-        pixunits=kwargs['pixunits'] #store the spatial units from the input kwargs
-    else:
-        pixunits=None #set it to None   
-    if 'specunits' in kwargs: #if the spectral units are in the input kwargs
-        specunits=kwargs['specunits'] #store the spectral units from the input kwargs
-    else:
-        specunits=None #set it to None   
-    if 'spectralres' in kwargs: #if the spectral resolution is in the input kwargs
-        spectralres=kwargs['spectralres'] #store the spectral resolution from the input kwargs
-    else:
-        spectralres=None #set it to None       
-    if 'bmaj' in kwargs: #if the beam major axis is in the input kwargs
-        bmaj=kwargs['bmaj'] #store the beam major axis from the input kwargs
-    else:
-        bmaj=None #set it to None
-    if 'bmin' in kwargs: #if the beam major axis is in the input kwargs
-        bmin=kwargs['bmin'] #store the beam major axis from the input kwargs
-    else:
-        bmin=None #set it to None
-    if 'bpa' in kwargs: #if the beam major axis is in the input kwargs
-        bpa=kwargs['bpa'] #store the beam major axis from the input kwargs
-    else:
-        bpa=None #set it to None
-    if 'nsigma' in kwargs: #if the nsigma for the detection limit as nsigma*rms is in the input kwargs
-        nsigma=kwargs['nsigma'] #store the nsigma for the detection limit as nsigma*rms from the input kwargs
-    else:
-        nsigma=3 #set it to 3
-    if 'rms' in kwargs: #if the rms is in the input kwargs
-        rms=kwargs['rms'] #store the rms from the input kwargs
-    else:
-        rms=None #set it to None
-    if 'pixelres' in kwargs: #if the pixel resolution is in the input kwargs
-        pixelres=kwargs['pixelres'] #store the pixel resolution from the input kwargs
-    else:
-        pixelres=None #set it to None
-    if 'asectokpc' in kwargs: #if the arcsec-to-kpc conversion is in the input kwargs
-        asectokpc=kwargs['asectokpc'] #store the arcsec-to-kpc conversion from the input kwargs
-    else:
-        asectokpc=None #set it to None
-    if 'objname' in kwargs: #if the object name is in the input kwargs
-        objname=kwargs['objname'] #store the object name from the input kwargs
-        if objname is None: #if in kwargs but not set
-            objname='' #set it to empty
-    else:
+    pixunits=kwargs['pixunits'] if 'pixunits' in kwargs else None
+    specunits=kwargs['specunits'] if 'specunits' in kwargs else None
+    spectralres=kwargs['spectralres'] if 'spectralres' in kwargs else None
+    bmaj=kwargs['bmaj'] if 'bmaj' in kwargs else None
+    bmin=kwargs['bmin'] if 'bmin' in kwargs else None
+    bpa=kwargs['bpa'] if 'bpa' in kwargs else None
+    nsigma=kwargs['nsigma'] if 'nsigma' in kwargs else 3
+    rms=kwargs['rms'] if 'rms' in kwargs else None
+    pixelres=kwargs['pixelres'] if 'pixelres' in kwargs else None
+    asectokpc=kwargs['asectokpc'] if 'asectokpc' in kwargs else None
+    objname=kwargs['objname'] if 'objname' in kwargs else None
+    if objname is None: #if in kwargs but not set
         objname='' #set it to empty
-    if 'subtitle' in kwargs: #if the arcsec-to-kpc conversion is in the input kwargs
-        subtitle=kwargs['subtitle'] #store the arcsec-to-kpc conversion from the input kwargs
-    else:
-        subtitle=None #set it to None
-    if 'wcs' in kwargs: #if the wcs is in the input kwargs
-        wcs=kwargs['wcs'] #store the wcs from the input kwargs
-    else:
-        wcs=None #set it to None
-    if 'position' in kwargs: #if the subplot position is in the input kwargs
-        position=kwargs['position'] #store the subplot position from the input kwargs
-    else:
-        position=111 #set it to 111
-    if 'mom0_ctr' in kwargs: #if the moment 0 contour levels are in the input kwargs
-        mom0_ctr=kwargs['mom0_ctr'] #store the moment 0 contour levels from the input kwargs
-    else:
-        mom0_ctr=None #set it to None
-    if 'lim' in kwargs: #if the plot limits are in the input kwargs
-        lim=kwargs['lim'] #store the plot limits from the input kwargs
-    else:
-        lim=None #set it to None
-    if 'ctr_width' in kwargs: #if the contours width is in the input kwargs
-        ctr_width=kwargs['ctr_width'] #store the contours width from the input kwargs
-    else:
-        ctr_width=2 #set it to 2    
+    subtitle=kwargs['subtitle'] if 'subtitle' in kwargs else None
+    wcs=kwargs['wcs'] if 'wcs' in kwargs else None
+    position=kwargs['position'] if 'position' in kwargs else 111
+    mom0_ctr=kwargs['mom0_ctr'] if 'mom0_ctr' in kwargs else None
+    mom1_ctr=kwargs['mom1_ctr'] if 'mom1_ctr' in kwargs else None
+    mom2_ctr=kwargs['mom2_ctr'] if 'mom2_ctr' in kwargs else None
+    lim=kwargs['lim'] if 'lim' in kwargs else None
+    mom0_cmap=kwargs['mom0_cmap'] if 'mom0_cmap' in kwargs else 'Greys'
+    mom1_cmap=kwargs['mom1_cmap'] if 'mom1_cmap' in kwargs else 'jet'
+    mom2_cmap=kwargs['mom2_cmap'] if 'mom2_cmap' in kwargs else 'YlGnBu'
+    ctr_width=kwargs['ctr_width'] if 'ctr_width' in kwargs else 2
+    mom0_ctrmap=kwargs['mom0_ctrmap'] if 'mom0_ctrmap' in kwargs else 'gnuplot'
+    mom2_ctrmap=kwargs['mom2_ctrmap'] if 'mom2_ctrmap' in kwargs else 'RdPu_r'
 
     #---------------   START THE FUNCTION   ---------------#
     #WE CHECK IF CUBE STATISTICS MUST BE COMPUTED#
@@ -2279,7 +2184,7 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         pixelres=pixelres*60 #convert into arcsec
     if pixelres<0: #if the spatial resolution is negative
         pixelres=-pixelres #convert it to positive
-        
+
     #---------------   DO THE PLOT   ---------------#
     #WE PREPARE THE FIGURE#
     if which == 'all': #if all moment maps must be plotted
@@ -2341,7 +2246,7 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         else:
             ctr=np.array(mom0_ctr) #use the user-defined levels
         #WE DO THE PLOT#
-        im=ax.imshow(mom0,cmap='Greys',norm=norm,aspect='equal') #plot the moment 0 map
+        im=ax.imshow(mom0,cmap=mom0_cmap,norm=norm,aspect='equal') #plot the moment 0 map
         ax.tick_params(direction='in') #change the ticks of the axes from external to internal
         ax.set_xlim(xlim) #set the xlim
         ax.set_ylim(ylim) #set the ylim
@@ -2349,9 +2254,9 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         ax.set_ylabel('DEC') #set the y-axis label
         #WE ADD THE CONTOURS#
         if momunit == 'cm$^{-2}$': #if the moment 0 is column density
-            ax.contour(mom0,levels=ctr,cmap='Greys_r',linewidths=ctr_width,linestyles='solid') #add the contours
+            ax.contour(mom0,levels=ctr,cmap=mom0_ctrmap,linewidths=ctr_width,linestyles='solid') #add the contours
         else:
-            ax.contour(mom0,levels=ctr,cmap='Greys_r',linewidths=ctr_width,linestyles='solid',norm=norm) #add the contours
+            ax.contour(mom0,levels=ctr,cmap=mom0_ctrmap,linewidths=ctr_width,linestyles='solid',norm=norm) #add the contours
         #WE ADD THE COLORBAR#
         if which == 'all': #if all moment maps must be plotted
             if momunit == 'cm$^{-2}$': #if the moment 0 is column density
@@ -2367,7 +2272,7 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         cb.set_ticks(ctr) #set the ticks of the colobar to the levels of the contours
         #WE ADD ANCILLARY INFORMATION#
         if momunit == 'cm$^{-2}$': #if the moment 0 is column density
-            ax.text(leftmargin,bottommargin,'Detection limit: {:.2e} {}'.format(sens*10.**(18),momunit),transform=ax.transAxes) #add the information of the detection limit
+            ax.text(leftmargin,bottommargin,'Detection limit: {:.1e} {}'.format(sens*10.**(18),momunit),transform=ax.transAxes) #add the information of the detection limit
         if pixelres is not None and bmaj is not None and bmin is not None and bpa is not None: #if the pixel resolution and the beam is given
             pxbeam=np.array([bmaj,bmin])/pixelres #beam in pixel
             box=patch.Rectangle((xlim[1]-2*pxbeam[0],ylim[0]),2*pxbeam[0],2*pxbeam[1],fill=None) #create the box for the beam. The box start at the bottom and at twice the beam size from the right edge and is twice the beam large. So, the beam is enclosed in a box that extend a beam radius around the beam patch
@@ -2421,11 +2326,14 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         #WE DEFINE THE NORMALIZATION#
         norm=cl.CenteredNorm()
         #WE DEFINE THE CONTOURS#
-        ctr_res=np.floor(0.85*np.nanmax(np.abs(mom1))/15)*5 #we want the contours to be multiple of 5
-        ctr_pos=np.arange(0,0.85*np.nanmax(np.abs(mom1)),ctr_res).astype(int) #positive radial velocity contours
-        ctr_neg=np.flip(-ctr_pos) #negative radial velocity contours
+        if mom1_ctr is None: #if the contours levels are not given
+            ctr_res=np.floor(0.85*np.nanmax(np.abs(mom1))/15)*5 #we want the contours to be multiple of 5
+            ctr_pos=np.arange(0,0.85*np.nanmax(np.abs(mom1)),ctr_res).astype(int) #positive radial velocity contours
+            ctr_neg=np.flip(-ctr_pos) #negative radial velocity contours
+        else:
+            ctr=np.array(mom1_ctr) #use the user-defined levels
         #WE DO THE PLOT#
-        im=ax.imshow(mom1,cmap='bwr',norm=norm,aspect='equal') #plot the moment 1 map with a colormap centered on 0
+        im=ax.imshow(mom1,cmap=mom1_cmap,norm=norm,aspect='equal') #plot the moment 1 map with a colormap centered on 0
         ax.tick_params(direction='in') #change the ticks of the axes from external to internal
         ax.set_xlim(xlim) #set the xlim
         ax.set_ylim(ylim) #set the ylim
@@ -2435,8 +2343,8 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
             ax.coords[1].set_ticklabel_visible(False) #hide the y-axis ticklabels and labels
         #WE ADD THE CONTOURS#
         ax.contour(mom1,levels=ctr_pos,colors='black',linewidths=ctr_width,linestyles='solid') #add the contours
-        ax.contour(mom1,levels=ctr_neg,colors='black',linewidths=ctr_width,linestyles='dashed') #add the contours
-        ax.contour(mom1,levels=[0],colors='gray',linewidths=2*ctr_width,linestyles='solid') #add the contour for the 0-velocity
+        ax.contour(mom1,levels=ctr_neg,colors='gray',linewidths=ctr_width,linestyles='dashed') #add the contours
+        ax.contour(mom1,levels=[0],colors='dimgray',linewidths=2*ctr_width,linestyles='solid') #add the contour for the 0-velocity
         #WE ADD THE COLORBAR#
         if which == 'all': #if it is an atlas
             cb=fig.colorbar(im,ax=ax,location='top',pad=0.0,label='Radial velocity [km/s]',fraction=0.0476) #add the colorbar on top of the plot
@@ -2445,7 +2353,7 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         cb.ax.tick_params(direction='in',length=5) #change the ticks of the corobar from external to internal and made them longer
         cb.set_ticks(np.concatenate((ctr_neg,ctr_pos),axis=None)) #set the ticks of the colobar to the levels of the contours
         #WE ADD ANCILLARY INFORMATION#
-        ax.text(leftmargin,bottommargin,'Systemic velocity: v$_{{sys}}$ = {:.2f} km/s'.format(vsys),transform=ax.transAxes) #add the information of the systemic velocity
+        ax.text(leftmargin,bottommargin,'Systemic velocity: v$_{{sys}}$ = {:.1f} km/s'.format(vsys),transform=ax.transAxes) #add the information of the systemic velocity
         if pixelres is not None and bmaj is not None and bmin is not None and bpa is not None: #if the pixel resolution and the beam is given
             pxbeam=np.array([bmaj,bmin])/pixelres #beam in pixel
             box=patch.Rectangle((xlim[1]-2*pxbeam[0],ylim[0]),2*pxbeam[0],2*pxbeam[1],fill=None) #create the box for the beam. The box start at the bottom and at twice the beam size from the right edge and is twice the beam large. So, the beam is enclosed in a box that extend a beam radius around the beam patch
@@ -2497,9 +2405,12 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
             xlim=[lim[0],lim[1]]
             ylim=[lim[2],lim[3]]
         #WE DEFINE THE CONTOURS#
-        ctr=np.power(2,np.arange(0,5,0.5))*disp #contours level in units of velocity dispersion
+        if mom2_ctr is None: #if the contours levels are not given
+            ctr=np.around(np.linspace(disp,0.9*np.nanmax(mom2),5),1) #5 contours level from the median dispersion to the 90% of the max and convert to 1-decimal float
+        else:
+            ctr=np.array(mom2_ctr) #use the user-defined levels
         #WE DO THE PLOT#
-        im=ax.imshow(mom2,cmap='YlGn',aspect='equal') #plot the moment 2 map with a square-root colormap and in units of velocity dispersion
+        im=ax.imshow(mom2,cmap=mom2_cmap,aspect='equal') #plot the moment 2 map with a square-root colormap and in units of velocity dispersion
         ax.tick_params(direction='in') #change the ticks of the axes from external to internal
         ax.set_xlim(xlim) #set the xlim
         ax.set_ylim(ylim) #set the ylim
@@ -2508,7 +2419,7 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         if which == 'all': #if all moment maps must be plotted
             ax.coords[1].set_ticklabel_visible(False) #hide the y-axis ticklabels and labels
         #WE ADD THE CONTOURS#
-        ax.contour(mom2,levels=ctr,cmap='RdPu_r',linewidths=ctr_width,linestyles='solid') #add the contours
+        ax.contour(mom2,levels=ctr,cmap=mom2_ctrmap,linewidths=ctr_width,linestyles='solid') #add the contours
         #WE ADD THE COLORBAR#
         if which == 'all': #if all moment maps must be plotted
             cb=fig.colorbar(im,ax=ax,location='top',pad=0.0,label='Velocity dispersion [km/s]',fraction=0.0476) #add the colorbar on top of the plot
@@ -2517,7 +2428,7 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         cb.ax.tick_params(direction='in',length=5) #change the ticks of the colorbar from external to internal and made them longer
         cb.set_ticks(ctr) #set the ticks of the colobar to the levels of the contours
         #WE ADD ANCILLARY INFORMATION#
-        ax.text(leftmargin,bottommargin,'Median dispersion: FWHM = {:.2f} km/s'.format(disp),transform=ax.transAxes) #add the information of the velocity dispersion
+        ax.text(leftmargin,bottommargin,'Median dispersion: FWHM = {:.1f} km/s'.format(disp),transform=ax.transAxes) #add the information of the velocity dispersion
         if pixelres is not None and bmaj is not None and bmin is not None and bpa is not None: #if the pixel resolution and the beam is given
             pxbeam=np.array([bmaj,bmin])/pixelres #beam in pixel
             box=patch.Rectangle((xlim[1]-2*pxbeam[0],ylim[0]),2*pxbeam[0],2*pxbeam[1],fill=None) #create the box for the beam. The box start at the bottom and at twice the beam size from the right edge and is twice the beam large. So, the beam is enclosed in a box that extend a beam radius around the beam patch
@@ -2581,10 +2492,7 @@ def removemod(datacube='',modelcube='',maskcube='',method='subtraction',blankthr
         ValueError: If no output folder is given
     """
     #CHECK THE INPUT#
-    if 'verbose' in kwargs: #check if the verbose option is in kwargs
-        verbose=kwargs['verbose'] #store the verbose option from the input kwargs
-    else:
-        verbose=False #set it to False
+    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
     if datacube == '' or datacube is None: #if a data cube is not given
         raise ValueError('ERROR: data cube is not set: aborting!')
     if modelcube == '' or modelcube is None: #if a model cube is not given
@@ -2690,10 +2598,7 @@ def rotcurve(mom1map='',pa=None,rotcenter=None,rotcurveoutdir='',rotcurveoutname
         ValueError: If no output folder is provided
     """    
     #CHECK THE INPUT#
-    if 'verbose' in kwargs: #check if the verbose option is in kwargs
-        verbose=kwargs['verbose'] #store the verbose option from the input kwargs
-    else:
-        verbose=False #set it to False
+    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
     if mom1map == '' or mom1map is None: #if a moment 1 map is not given
         raise ValueError('ERROR: velocity field is not set: aborting!')
     if mom1map[0] != '.': #if the moment 1 map name start with a . means that it is a path to the map (so differs from path parameter)
@@ -2729,25 +2634,14 @@ def rotcurve(mom1map='',pa=None,rotcenter=None,rotcurveoutdir='',rotcurveoutname
     elif outname[0] != '.': #if the outname name start with a . means that it is a path to the cube (so differs from path parameter)
         outname=outdir+outname
     #CHECK THE KWARGS#
-    if 'vsys' in kwargs: #if the systemic velocity is in the input kwargs
-        vsys=kwargs['vsys'] #store the systemic velocity from the input kwargs
-    else:
-        vsys=None #set it to None
-    if 'pixelres' in kwargs: #if the pixel resolution is in the input kwargs
-        pixelres=kwargs['pixelres'] #store the pixel resolution from the input kwargs
-    else:
-        pixelres=None #set it to None
-    if 'asectokpc' in kwargs: #if the arcsec-to-kpc conversion is in the input kwargs
-        asectokpc=kwargs['asectokpc'] #store the arcsec-to-kpc conversion from the input kwargs
-    else:
-        asectokpc=None #set it to None
-    if 'objname' in kwargs: #if the object name is in the input kwargs
-        objname=kwargs['objname'] #store the object name from the input kwargs
-        if objname is None: #if in kwargs but not set
-            objname='' #set it to empty
-    else:
+    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
+    vsys=kwargs['vsys'] if 'vsys' in kwargs else None
+    pixelres=kwargs['pixelres'] if 'pixelres' in kwargs else None
+    asectokpc=kwargs['asectokpc'] if 'asectokpc' in kwargs else None
+    objname=kwargs['objname'] if 'objname' in kwargs else None
+    if objname is None: #if in kwargs but not set
         objname='' #set it to empty
-           
+
     #---------------   START THE FUNCTION   ---------------#
     with fits.open(mom1map) as m1: #open the moment 1 map
         mom1=m1[0].data #store the data
@@ -2857,8 +2751,8 @@ def converttoHI(data,fluxunits='Jy/beam',beamarea=None,pixunits='deg',spectralre
     else: #if the data is given as a numpy array
         if spectralres is None or beamarea is None: #if no additional information are given, abort
             raise ValueError('ERROR: Please provide the spectral resolution and the beam area. Aborting!')
-        darray=data #store the data
-        
+        darray=data #store the data   
+     
     #WE CHECK THE REQUIRED INFORMATION FOR FLUX CALCULATION#
     #------------   BEAM     ------------#
     if beamarea is None: #if the beam area is not given
@@ -2979,7 +2873,7 @@ def cosmo(z,H0,omega_matter,omega_vacuum,verbose=True):
     V_Gpc=4.*np.pi*((0.001*c/H0)**3)*VCM
 
     if verbose:
-        print('For H₀={:.1f}, \u03A9ₘ={:.2f}, \u03A9ᵥ={:.2f}, z={}:'.format(H0,omega_matter,omega_vacuum,z))
+        print('For H₀={:.1f}, \u03A9ₘ={:.1f}, \u03A9ᵥ={:.1f}, z={}:'.format(H0,omega_matter,omega_vacuum,z))
         print('It is now {:.1f} Gyr since the Big Bang.'.format(age_Gyr))
         print('The age at redshift z was {:.1f} Gyr.'.format(zage_Gyr))
         print('The light travel time was {:.3f} Gyr.'.format(DTT_Gyr))
@@ -2988,7 +2882,7 @@ def cosmo(z,H0,omega_matter,omega_vacuum,verbose=True):
         print('The angular size distance Dₐ is {:.1f} Mpc or {:.3f} Gly.'.format(DA_Mpc,DA_Gyr))
         print('This gives a scale of {:.3f} kpc/arcsec.'.format(kpc_DA))
         print('The luminosity distance Dₗ is {:.1f} Mpc or {:.3f} Gly.'.format(DL_Mpc,DL_Gyr))
-        print('The distance modulus, m-M, is {:.2f}'.format(5*np.log10(DL_Mpc*10.**6)-5))
+        print('The distance modulus, m-M, is {:.1f}'.format(5*np.log10(DL_Mpc*10.**6)-5))
 
     cosmology={} #initialize the cosmology dictionary
     cosmology['age']=age_Gyr
@@ -3028,7 +2922,7 @@ def getHImass(data,fluxunits='Jy/beam*m/s',beamarea=None,pixelres=None,pixunits=
         verbose (bool): option to print messages to terminal if True   
         
     Returns:
-        HI mass over the given array with the uncertainty as float
+        HI mass over the given array with the uncertainty as float: mass,error = getHImass()
         
     Raises:
         ValueError: If wrong spatial units are provided
@@ -3058,7 +2952,8 @@ def getHImass(data,fluxunits='Jy/beam*m/s',beamarea=None,pixelres=None,pixunits=
         darray=data #store the data
     else:
         raise ValueError('ERROR: Please provide the data as path-to-fits file or as numpy.ndarray. Aborting!')
-        
+    darray[darray<0]=0 #remove the negatives if any (like noise artifacts sneaked in the moment map    
+    
     #WE CHECK THE REQUIRED INFORMATION FOR FLUX CALCULATION#
     #------------   BEAM     ------------#
     if beamarea is None: #if the beamarea is not given
@@ -3093,7 +2988,7 @@ def getHImass(data,fluxunits='Jy/beam*m/s',beamarea=None,pixelres=None,pixunits=
     elif 'm/s'.casefold() in fluxunits: #if the flux units have m/s
         darray=darray/1000 #convert into km/s
     else:
-        raise ValueError('ERROR: Wrong units provided. Accepted values: m/s, km/s. Aborting!')
+        raise ValueError("ERROR: Wrong flux units provided: {}. They must contain 'm/s' or 'km/s'. Aborting!".format(fluxunits))
     #------------   PB CORRECTION     ------------# 
     if pbcorr: #if the primary beam correction is applied
         #------------   IS IN THE INPUT?     ------------# 
@@ -3125,6 +3020,7 @@ def getHImass(data,fluxunits='Jy/beam*m/s',beamarea=None,pixelres=None,pixunits=
                         darray=darray/pb_slice #apply the pb correction
         elif verbose:
             warnings.warn('You have not provided a beam cube. Cannot apply primary beam correction!')
+
     #------------   DISTANCE     ------------#
     if distance is None: #if no pixel resolution is provided
         raise ValueError('ERROR: No distance provided: aborting!')
@@ -3147,22 +3043,22 @@ def getHImass(data,fluxunits='Jy/beam*m/s',beamarea=None,pixelres=None,pixunits=
             if xmin < 0: #if xmin is negative
                 warnings.warn('Lower x limit is negative ({}): set to 0.'.format(xmin))
                 xmin=0 #set it to 0
-            if xmax > data.shape[2]: #if xmax is too high
+            if xmax > darray.shape[1]: #if xmax is too high
                 warnings.warn('Max x is too high ({}): set to the size of x.'.format(xmax))
-                xmax=data.shape[2] #set it to size of data
+                xmax=darray.shape[1] #set it to size of data
             if ymin < 0: #if ymin is negative
                 warnings.warn('Lower y limit is negative ({}): set to 0.'.format(ymin))
                 ymin=0 #set it to 0
-            if ymax > data.shape[1]: #if ymax is too high
+            if ymax > darray.shape[0]: #if ymax is too high
                 warnings.warn('Max y is too high ({}): set to the size of y.'.format(ymax))
-                ymax=data.shape[1] #set it to size of data
-    #NOW WE CALCULATE THE MASS#  
-        HI_mass=(2.35*10**5)*(distance**2)*pixelsize*np.nansum(darray[xmin:xmax,ymin:ymax])/beamarea #compute the HI masss
-    else:
+                ymax=darray.shape[0] #set it to size of data
+    #NOW WE CALCULATE THE MASS# 
+        HI_mass=(2.35*10**5)*(distance**2)*pixelsize*np.nansum(darray[ymin:ymax,xmin:xmax])/beamarea #compute the HI masss
+    else: 
         HI_mass=(2.35*10**5)*(distance**2)*pixelsize*np.nansum(darray)/beamarea #compute the HI mass
     error=HI_mass/10 #the error on the mass is equal to the calibration error (typically of 10%)
     if verbose: #if the print-to-terminal option is True
-        print('Total HI mass: {:.2e} solar masses'.format(HI_mass))
+        print('Total HI mass: {:.1e} solar masses'.format(HI_mass))
     return HI_mass,error #return the mass and its error
 
 #############################################################################################
@@ -3215,6 +3111,8 @@ def flux(data,fluxunits='Jy/beam',beamarea=None,pixelres=None,pixunits='deg',spe
         darray=data #store the data
     else:
         raise ValueError('ERROR: Please provide the data as path-to-fits file or as numpy.ndarray. Aborting!')
+    #------------   REMOVE THE NEGATIVE VALUES     ------------# 
+    darray[darray<0]=0 #set to 0 the negative flux values    
         
     #WE CHECK THE REQUIRED INFORMATION FOR FLUX CALCULATION#
     #------------   BEAM     ------------#
@@ -3277,21 +3175,21 @@ def flux(data,fluxunits='Jy/beam',beamarea=None,pixelres=None,pixunits='deg',spe
             if xmin < 0: #if xmin is negative
                 warnings.warn('Lower x limit is negative ({}): set to 0.'.format(xmin))
                 xmin=0 #set it to 0
-            if xmax > data.shape[2]: #if xmax is too high
+            if xmax > darray.shape[1]: #if xmax is too high
                 warnings.warn('Max x is too high ({}): set to the size of x.'.format(xmax))
-                xmax=data.shape[2] #set it to size of data
+                xmax=darray.shape[1] #set it to size of data
             if ymin < 0: #if ymin is negative
                 warnings.warn('Lower y limit is negative ({}): set to 0.'.format(ymin))
                 ymin=0 #set it to 0
-            if ymax > data.shape[1]: #if ymax is too high
+            if ymax > darray.shape[0]: #if ymax is too high
                 warnings.warn('Max y is too high ({}): set to the size of y.'.format(ymax))
-                ymax=data.shape[1] #set it to size of data
+                ymax=darray.shape[0] #set it to size of data
     #NOW WE CALCULATE THE FLUX# 
-        flux=np.nansum(darray[xmin:xmax,ymin:ymax])*spectralres*pixelsize/beamarea #calculate the flux
+        flux=np.nansum(darray[ymin:ymax,xmin:xmax])*spectralres*pixelsize/beamarea #calculate the flux
     else:
         flux=np.nansum(darray)*spectralres*pixelsize/beamarea #calculate the flux
     if verbose: #if the print-to-terminal option is True
-        print('The flux is {:.2e} {}'.format(flux,units))
+        print('The flux is {:.1e} {}'.format(flux,units))
     return flux #return the flux
             
 #############################################################################################
@@ -3414,6 +3312,7 @@ def create_config(name='default_parameters'):
             'clipping	=	   #clip the spectrum to a % of the profile peak [True,False] (default: False)\n'
             'threshold	=	   #clip threshold as % of the peak (0.5 is 50%) if clipping is True (default: 0.5)\n'
             'errors		=	   #compute the errors on the best-fit [True,False] (default: False)\n'
+            'write_field		=	   #compute the best-fit velocity field [True,False] (default: False)\n'
             'outputdir	=	   #output directory to save the model cube. If empty, is the same as [INPUT] path (default: None)\n'
             'outname		=	   #output name of the model cube including extension .fits (default: None)\n'
             '\n'
