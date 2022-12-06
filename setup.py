@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name="nicci",
-    version="0.10.1",
+    version="0.11",
     url="",
     author="Simone Veronese",
     author_email="veronese@astron.nl",

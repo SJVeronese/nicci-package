@@ -1,4 +1,4 @@
-from .main import importparameters,chanmap,cubedo,cubestat,fitsarith,fixmask,gaussfit,getpv,plotmom,removemod,converttoHI,cosmo,getHImass,flux,create_config
+from .main import importparameters,chanmap,cubedo,cubestat,fitsarith,fixmask,gaussfit,getpv,plotmom,removemod,rotcurve,stacking,velfi,converttoHI,cosmo,getHImass,flux,create_config
 
-__version__ = '0.10.1'
+__version__ = '0.11'
 __author__ = 'Simone Veronese'
