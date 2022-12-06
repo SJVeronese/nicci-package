@@ -26,6 +26,7 @@ Upgrade nicci with pip
 * pandas 1.3.3
 * pvextractor 0.2
 * scipy 1.7.1
+* tqdm 4.62.3
 
 ## List of functions
 * importparameters: main function if you want to use the parameter file to control the arguments of the functions. It reads an ini-structured text file and stores each row in a dictionary entry that can be pass to the functions.
