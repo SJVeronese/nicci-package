@@ -1,6 +1,6 @@
 # Pre-alpha/Early access
 
-# New analysIs Code for Cubes and Images
+# Naive functIons Collection for Cubes and Images
 A collection of functions for the analysis of astronomical data cubes and images
 * Tested on Windows 10 Enterprise (build 19045.2251) with 16 GB of RAM in the following environments:
   - Jupyter notebook 6.4.7
