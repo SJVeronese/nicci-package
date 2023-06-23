@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name="nicci",
-    version="0.12",
+    version="0.13",
     url="",
     author="Simone Veronese",
     author_email="veronese@astron.nl",
@@ -13,6 +13,6 @@ setuptools.setup(
     classifiers=[
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.10',
     ],
 )

@@ -1,77 +1,83 @@
 """A collection of functions for the analysis of astronomical data cubes and images.
 
                 NICCI
-New analysIs Code for Cubes and Images
+Naive functIons Collection for Cubes and Images
 """
 #############################################################################################
 #
 # FILENAME: main
-# VERSION: 0.12
-# DATE: 06/03/2023
+# VERSION: 0.13
+# DATE: 23/06/2023
 # CHANGELOG:
-#   v 0.12: - (NEW) lines_finder
-#           - importparameters
-#               - updated with the new stacking parameters
-#               - updated with the new function
-#           - cubedo
-#               - fixed wcs recalculation in operation 'cut'
-#               - speed optimized operation 'extend'
-#           - gaussfit
-#               - fixed spectral axis calculation
-#           - rotcurve
-#               - fixed error if pa is 45, 135, 225 or 315 degrees
-#           - stacking
-#               - regridding now conserves the flux
-#               - regridding is done after the shuffle
-#               - removed regridding of the velocity field
-#               - removed input reference spectrum and reference rms
-#               - source finding is done through a separate function
-#               - added option to select type of regions (cones or concentric)
-#               - changed ncones into nregions
-#               - added return of stacked spectrum, lines found and the rms for each region
-#               - added option to select weights between '1' and '1/rms**2'
-#               - improved visualization of the staked positions
-#               - improved visualization of detected sources
-#               - improved visualization of the stacking result
-#               - fixed weights calculation if weight is None
-#               - fixed the expected rms in the stacked rms plot
-#               - fixed colors error if number of region is greater than 10
-#               - fixed masked cube writing if shape of mask and data cube mismatch
-#               - fixed stacked spectrum plot if no (reliable) sources are found
-#               - fixed error if no sources are found
-#               - fixed error if no pixel are assigned to a region
-#               - fixed conversion to column density when cubestat is run
-#               - fixed spectral axis calculation
-#               - fixed channel range calculation for the emission width if the spectral resolution is positive
-#           - converttoHI
-#               - input data can be list
-#           - create_config
-#               - updated with the new stacking parameters
-#               - updated with the new function
-#           - __assigned_to_cones
-#               - added contraints to xrange and yrange
-#               - removed 'pixelres' from the input
-#           - __get_reliability
-#               - fixed output path when objname is not given
-#           - __plot_stack_result
-#               - changed RMS plot units into column density
-#               - improved visualization of detected sources
-#               - fixed the expected rms in the stacked rms plot
-#           - __plot_stack_spectrum
-#               - added smoothed spectrum to the plot if smoothing kernels are used in the source finder
-#               - improved visualization of the stacking result
-#           - __stack
-#               - fixed weights calculation if weight is None
-#           - (NEW) private functions
-#               - __assigned_to_concentric
-#               - __get_rms
-#           - improved rms calculation in all functions
-#           - minor fixes
-#           - improved documentation
+#- importparameters
+#   - refined the import commands to be more compact
+#   - fixed according to changes in the functions
+#   - renamed to import_parameters
+#- cubedo
+#   - improved 'shuffle' performance by omitting empty spectra
+#- cubestat
+#   - improved rms calculation
+#- lines_finder
+#   - added option to link neighbour sources
+#   - added option to reject the negative detections
+#   - added option to write the sources catalogue
+#   - added source catalogue
+#   - added gaussianity tests
+#   - fixed reliability calculation
+#- stacking
+#   - can be done without a mask
+#   - can be done without shuffle
+#   - added lines finder mask to the output
+#   - added option to stack on cells
+#   - added option to select the flux range for rms calculation
+#   - added option to select the statistic for rms calculation
+#   - added detection position map
+#   - added check for empty stacked spectrum
+#   - added calculation of spectral periodicity
+#   - adapted to the new lines finder function
+#   - improved visualization of the stacked spectra
+#   - improved visualization of the stacked regions
+#   - fixed output name
+#   - fixed output source spectra if region has no valid pixel
+#   - fixed sensitivity computation
+#   - removed most of the diagnostic plots
+#   - removed the emission range
+#   - minor fixes
+#- velfi
+#   - added progress bar
+#   - optimazed computation
+#- create_config
+#   - fixed according to changes in the functions
+#- (NEW) __assign_to_cells
+#- __assign_to_concentric
+#   - fixed assignment if angle is -180,-90,0,90,180
+#- (NEW) __auto_fit_fontsize
+#- __get_reliability
+#   - fixed parameters calculation
+#- __get_sources_catalogue
+#   - renamed into __get_sources_type
+#- __plot_stack_result
+#   - removed the emission range
+#   - fixed sensitivity computation
+#- __plot_stack_spectrum
+#   - removed the emission range
+#- __source_linker
+#   - added option to link neighbour sources
+#- __stack
+#   - added option to select the flux range for rms calculation
+#   - added option to select the statistic for rms calculation
+#   - removed most of the diagnostic variables
+#   - removed most of the diagnostic plots
+#   - minor fixes
+#- improved kwargs import
+#- plot ticks properties are set globally for all functions
+#- removed figures titles
+#- removed unnecessary lines of code
+#- changed 'format' variable for the plotting format file into 'plot_format' to avoid problems with the build-in 'format' function of Python
+#- improved documentation
 #
-#   TO DO:  - sistema velfi (usa __readstring, __load, metti barra progressi, etc.)
-#           - vedi se shuffle si puo' fare con np.roll
-#           - aggiungere galmod, fixhead di gipsy
+#   TO DO:  - vedi se shuffle si puo' fare con np.roll
+#           - sistema i docstrings delle private functions
 #           - aggiungere il logger (con logger.)
 #
 #############################################################################################
@@ -85,17 +91,19 @@ from astropy.wcs import WCS
 from astropy.modeling import models
 from astropy.modeling.fitting import LevMarLSQFitter as fit
 from astropy.visualization import hist
+from scipy.stats import anderson
 from pvextractor import Path
 from pvextractor import PathFromCenter
 from pvextractor import extract_pv_slice
-from reproject import reproject_adaptive as spatial_regrid
 from scipy.stats import chi2 as statchi2
 from scipy.stats import gaussian_kde as kde
 from tqdm.auto import tqdm
 import configparser
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.pyplot as plt
 import matplotlib.colors as cl
 import matplotlib.patches as patch
+from matplotlib.transforms import Bbox
 import numpy as np
 import os
 import pandas as pd
@@ -108,9 +116,23 @@ def _simple_warning(message,category,filename,lineno,file=None,line=None):
     return 'WARNING: %s: %s\n' %(category.__name__,message)
     
 warnings.formatwarning=_simple_warning
+
 plt.rc('font',size=14) #set the default fontsize for the text in the atlas
+plt.rcParams['xtick.direction']='in'
+plt.rcParams['xtick.major.size']=10
+plt.rcParams['xtick.major.width']=1
+plt.rcParams['xtick.minor.size']=5
+plt.rcParams['xtick.minor.width']=1
+plt.rcParams['ytick.direction']='in'
+plt.rcParams['ytick.major.size']=10
+plt.rcParams['ytick.major.width']=1
+plt.rcParams['ytick.minor.size']=5
+plt.rcParams['ytick.minor.width']=1
+
 fits.Conf.use_memmap=False #disable the memomory map when open a fits
 
+__all__=['import_parameters','chanmap','cubedo','cubestat','fitsarith','fixmask','gaussfit','getpv','lines_finder','noise_variations','radial_profile','plotmom','removemod','rotcurve','stacking','velfi','converttoHI','cosmo','getHImass','flux','create_config'] #list of pblic function to be imported when running 'from nicci import *'
+        
 #############################################################################################
 
 # print("""||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
@@ -142,14 +164,14 @@ fits.Conf.use_memmap=False #disable the memomory map when open a fits
 # ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||""")
 
 #############################################################################################
-def importparameters(parameterfile):
-    """Read an ini-structured text file and store each row in a dictionary entry that can be pass to the functions. Main function if you want to use the parameter file to control the arguments of the other functions.
+def import_parameters(parameter_file):
+    """Read an INI-structured text file and store each row in a dictionary entry that can be passed to other functions. This is the main function used to control the arguments of other functions using a parameter file.
     
     Args:
-        parameterfile (string): name or path+name of the text file structured as ini configuration file (i.e., a list of rows with various [section] headers) containing the parameter values. Parameters not in the file, will be initialized to default values.
-
+        parameter_file (str): Name or path+name of the text file structured as an INI configuration file (i.e., a list of rows with various [section] headers) containing the parameter values. Parameters not in the file will be initialized to default values.
+    
     Returns:
-        Python dictionary with all the parameters needed to run the funtions.
+        dict: Python dictionary with all the parameters needed to run the functions.
         
     Raises:
         None
@@ -160,27 +182,27 @@ def importparameters(parameterfile):
     
     #GENERAL section
     parameters['GENERAL']='----------------- GENERAL -----------------'
-    parameters['verbose']=config.getboolean('GENERAL','verbose') if config.has_option('GENERAL','verbose') else False #print the outputs option. If it is not given, set it to False
+    parameters['verbose']=config.getboolean('GENERAL','verbose',fallback=False) #print the outputs option. If it is not given, set it to False
     
     #INPUT section
     parameters['INPUT']='----------------- INPUT -----------------'
-    parameters['path']=config.get('INPUT','path')  if config.has_option('INPUT','path') else (os.getcwd()+'/') #path to the working directory (generally where the data are stored). If it is not given, set it to the currect directory
+    parameters['path']=config.get('INPUT','path',fallback=os.getcwd()+'/') #path to the working directory (generally where the data are stored). If it is not given, set it to the currect directory
  
     #COSMOLOGY section (default values: https://ui.adsabs.harvard.edu/abs/2014ApJ...794..135B/abstract)
     parameters['COSMOLOGY']='----------------- COSMOLOGY -----------------'
-    parameters['H0']=config.getfloat('COSMOLOGY','H0') if config.has_option('COSMOLOGY','H0') else 69.6 #Hubble parameter. If it is not given, set it to 69.6
-    parameters['Omega_matter']=config.getfloat('COSMOLOGY','Omegam') if config.has_option('COSMOLOGY','Omegam') else 0.286 #Omega matter. If it is not given, set it to 0.286
-    parameters['Omega_vacuum']=config.getfloat('COSMOLOGY','Omegav') if config.has_option('COSMOLOGY','Omegav') else 0.714 #Omega vacuum. If it is not given, set it to 0.714
+    parameters['H0']=config.getfloat('COSMOLOGY','H0',fallback=69.6) #Hubble parameter. If it is not given, set it to 69.6
+    parameters['Omega_matter']=config.getfloat('COSMOLOGY','Omegam',fallback=0.286) #Omega matter. If it is not given, set it to 0.286
+    parameters['Omega_vacuum']=config.getfloat('COSMOLOGY','Omegav',fallback=0.714) #Omega vacuum. If it is not given, set it to 0.714
     
     #GALAXY section
     parameters['GALAXY']='----------------- GALAXY -----------------'
-    parameters['objname']=config.get('GALAXY','objname') if config.has_option('GALAXY','objname') else None #name of the object. If it is not given, set it to None
-    parameters['redshift']=config.getfloat('GALAXY','redshift') if config.has_option('GALAXY','redshift') else None #redshift of the object. If it is not given, set it to None
-    parameters['distance']=config.getfloat('GALAXY','distance') if config.has_option('GALAXY','distance') else None #distance of the object in Mpc. If it is not given, set it to None
-    parameters['asectokpc']=config.getfloat('GALAXY','asectokpc') if config.has_option('GALAXY','asectokpc') else None #arcsec to kpc conversion. If it is not given, set it to None
-    parameters['vsys']=config.getfloat('GALAXY','vsys') if config.has_option('GALAXY','vsys') else None #systemic velocity of the object in km/s. If it is not given, set it to None
-    parameters['pa']=config.getfloat('GALAXY','pa') if config.has_option('GALAXY','pa') else None #position angle of the object in deg. If it is not given, set it to None
-    parameters['inc']=config.getfloat('GALAXY','inc') if config.has_option('GALAXY','inc') else None #inclination angle of the object in deg. If it is not given, set it to None
+    parameters['objname']=config.get('GALAXY','objname',fallback=None) #name of the object. If it is not given, set it to None
+    parameters['redshift']=config.getfloat('GALAXY','redshift',fallback=None) #redshift of the object. If it is not given, set it to None
+    parameters['distance']=config.getfloat('GALAXY','distance',fallback=None) #distance of the object in Mpc. If it is not given, set it to None
+    parameters['asectokpc']=config.getfloat('GALAXY','asectokpc',fallback=None) #arcsec to kpc conversion. If it is not given, set it to None
+    parameters['vsys']=config.getfloat('GALAXY','vsys',fallback=None) #systemic velocity of the object in km/s. If it is not given, set it to None
+    parameters['pa']=config.getfloat('GALAXY','pa',fallback=None) #position angle of the object in deg. If it is not given, set it to None
+    parameters['inc']=config.getfloat('GALAXY','inc',fallback=None) #inclination angle of the object in deg. If it is not given, set it to None
     
     if parameters['distance'] is None or parameters['asectokpc'] is None: #if no distance is or angular scale is given
         if parameters['redshift'] is not None:  #if the redshift is given
@@ -194,124 +216,124 @@ def importparameters(parameterfile):
     
     #CUBEPAR section
     parameters['CUBEPAR']='----------------- CUBEPAR -----------------'
-    parameters['pixunits']=config.get('CUBEPAR','pixunits') if config.has_option('CUBEPAR','pixunits') else None #spatial units. If it is not given, set it to None
-    parameters['specunits']=config.get('CUBEPAR','specunits') if config.has_option('CUBEPAR','specunits') else None #spectral units. If it is not given, set it to None
-    parameters['fluxunits']=config.get('CUBEPAR','fluxunits') if config.has_option('CUBEPAR','fluxunits') else None #spatial units. If it is not given, set it to None
-    parameters['spectralres']=config.getfloat('CUBEPAR','spectralres') if config.has_option('CUBEPAR','spectralres') else None #spectral resolution of km/s. If it is not given, set it to None
-    parameters['pixelres']=config.getfloat('CUBEPAR','pixelres') if config.has_option('CUBEPAR','pixelres') else None #pixel resolution in arcsec. If it is not given, set it to None
-    parameters['rms']=config.getfloat('CUBEPAR','rms') if config.has_option('CUBEPAR','rms') else None #root-mean-square value in Jy/beam. If it is not given, set it to None
+    parameters['pixunits']=config.get('CUBEPAR','pixunits',fallback=None) #spatial units. If it is not given, set it to None
+    parameters['specunits']=config.get('CUBEPAR','specunits',fallback=None) #spectral units. If it is not given, set it to None
+    parameters['fluxunits']=config.get('CUBEPAR','fluxunits',fallback=None) #spatial units. If it is not given, set it to None
+    parameters['spectralres']=config.getfloat('CUBEPAR','spectralres',fallback=None) #spectral resolution of km/s. If it is not given, set it to None
+    parameters['pixelres']=config.getfloat('CUBEPAR','pixelres',fallback=None) #pixel resolution in arcsec. If it is not given, set it to None
+    parameters['rms']=config.getfloat('CUBEPAR','rms',fallback=None) #root-mean-square value in Jy/beam. If it is not given, set it to None
     
     #BEAM section
     parameters['BEAM']='----------------- BEAM -----------------'
-    parameters['bmaj']=config.getfloat('BEAM','bmaj') if config.has_option('BEAM','bmaj') else None #beam major axis in arcsec. If it is not given, set it to None
-    parameters['bmin']=config.getfloat('BEAM','bmin') if config.has_option('BEAM','bmaj') else None #beam minor axis in arcsec. If it is not given, set it to None
-    parameters['bpa']=config.getfloat('BEAM','bpa') if config.has_option('BEAM','bpa') else None #beam position angle in arcsec. If it is not given, set it to None
+    parameters['bmaj']=config.getfloat('BEAM','bmaj',fallback=None) #beam major axis in arcsec. If it is not given, set it to None
+    parameters['bmin']=config.getfloat('BEAM','bmin',fallback=None) #beam minor axis in arcsec. If it is not given, set it to None
+    parameters['bpa']=config.getfloat('BEAM','bpa',fallback=None) #beam position angle in arcsec. If it is not given, set it to None
     
     #MODE section
     parameters['MODE']='----------------- MODE -----------------'
-    parameters['mode']=config.get('MODE','mode') if config.has_option('MODE','mode') else None #main function operation option. If it is not given, set it to None
+    parameters['mode']=config.get('MODE','mode',fallback=None) #main function operation option. If it is not given, set it to None
 
     #CORRECTION section
     parameters['CORRECTION']='----------------- CORRECTION -----------------'
-    parameters['pbcorr']=config.getboolean('CORRECTION','pbcorr') if config.has_option('CORRECTION','pbcorr') else False #primary beam correction option. If it is not given, set it to False
+    parameters['pbcorr']=config.getboolean('CORRECTION','pbcorr',fallback=False) #primary beam correction option. If it is not given, set it to False
 
     #FITS section
     parameters['FITS']='----------------- FITS -----------------'
-    parameters['datacube']=config.get('FITS','datacube') if config.has_option('FITS','datacube') else None #name of the fits file of the data cube including .fits. If it is not given, set it to None
-    parameters['beamcube']=config.get('FITS','beamcube') if config.has_option('FITS','beamcube') else None #name of the fits file of the beam cube including .fits. If it is not given, set it to None
-    parameters['maskcube']=config.get('FITS','maskcube') if config.has_option('FITS','maskcube') else None #name of the fits file of the mask cube including .fits. If it is not given, set it to None
-    parameters['mask2d']=config.get('FITS','mask2d') if config.has_option('FITS','mask2d') else None #name of the fits file of the 2D mask including .fits. If it is not given, set it to None
-    parameters['channelmap']=config.get('FITS','channelmap') if config.has_option('FITS','channelmap') else None #name of the fits file of the channel map including .fits. If it is not given, set it to None
-    parameters['modelcube']=config.get('FITS','modelcube') if config.has_option('FITS','modelcube') else None #name of the fits file of the model cube including .fits. If it is not given, set it to None
-    parameters['mom0map']=config.get('FITS','mom0map') if config.has_option('FITS','mom0map') else None #name of the fits file of the moment 0 map including .fits. If it is not given, set it to None
-    parameters['mom1map']=config.get('FITS','mom1map') if config.has_option('FITS','mom1map') else None #name of the fits file of the moment 1 map including .fits. If it is not given, set it to None
-    parameters['mom2map']=config.get('FITS','mom2map') if config.has_option('FITS','mom2map') else None #name of the fits file of the moment 2 map including .fits. If it is not given, set it to None
-    parameters['vfield']=config.get('FITS','vfield') if config.has_option('FITS','vfield') else None #name of the fits file of the velocity field including .fits. If it is not given, set it to None
+    parameters['datacube']=config.get('FITS','datacube',fallback=None) #name of the fits file of the data cube including .fits. If it is not given, set it to None
+    parameters['beamcube']=config.get('FITS','beamcube',fallback=None) #name of the fits file of the beam cube including .fits. If it is not given, set it to None
+    parameters['maskcube']=config.get('FITS','maskcube',fallback=None) #name of the fits file of the mask cube including .fits. If it is not given, set it to None
+    parameters['mask2d']=config.get('FITS','mask2d',fallback=None) #name of the fits file of the 2D mask including .fits. If it is not given, set it to None
+    parameters['channelmap']=config.get('FITS','channelmap',fallback=None) #name of the fits file of the channel map including .fits. If it is not given, set it to None
+    parameters['modelcube']=config.get('FITS','modelcube',fallback=None) #name of the fits file of the model cube including .fits. If it is not given, set it to None
+    parameters['mom0map']=config.get('FITS','mom0map',fallback=None) #name of the fits file of the moment 0 map including .fits. If it is not given, set it to None
+    parameters['mom1map']=config.get('FITS','mom1map',fallback=None) #name of the fits file of the moment 1 map including .fits. If it is not given, set it to None
+    parameters['mom2map']=config.get('FITS','mom2map',fallback=None) #name of the fits file of the moment 2 map including .fits. If it is not given, set it to None
+    parameters['vfield']=config.get('FITS','vfield',fallback=None) #name of the fits file of the velocity field including .fits. If it is not given, set it to None
     #CHANMAP
     parameters['CHANMAP']='----------------- CHANMAP -----------------'
-    parameters['from_chan']=config.getint('CHANMAP','chanmin') if config.has_option('CHANMAP','chanmin') else 0 #starting channel to plot in the channel map. If it is not given, set it to 0
-    parameters['to_chan']=config.getint('CHANMAP','chanmax') if config.has_option('CHANMAP','chanmax') else None #ending channel to plot in the channel map. If it is not given, set it to None
-    parameters['chansep']=config.getint('CHANMAP','chansep') if config.has_option('CHANMAP','chansep') else 1 #channel separation to plot in the channel map (chamin,chanmin+chansep,chanmin+2*chansep,...,chanmax). If it is not given, set it to 1
+    parameters['from_chan']=config.getint('CHANMAP','chanmin',fallback=0) #starting channel to plot in the channel map. If it is not given, set it to 0
+    parameters['to_chan']=config.getint('CHANMAP','chanmax',fallback=None) #ending channel to plot in the channel map. If it is not given, set it to None
+    parameters['chansep']=config.getint('CHANMAP','chansep',fallback=1) #channel separation to plot in the channel map (chamin,chanmin+chansep,chanmin+2*chansep,...,chanmax). If it is not given, set it to 1
     parameters['chanbox']=config.get('CHANMAP','box').split(',') if config.has_option('CHANMAP','box') else None #comma-separated pixel edges of the box to extract the channel mapS in the format [xmin,xmax,ymin,ymax]. If it is not given, set it to None
     if parameters['chanbox'] != [''] and parameters['chanbox'] is not None: #if the box is given
         parameters['chanbox']=[int(i) for i in parameters['chanbox']] #convert string to float
-    parameters['chansig']=config.getfloat('CHANMAP','nsigma') if config.has_option('CHANMAP','nsigma') else 3 #rms threshold to plot the contours (lowest contours will be nsigma*rms). If it is not given, set it to 3
-    parameters['chanmask']=config.getboolean('CHANMAP','usemask') if config.has_option('CHANMAP','usemask') else False #use a mask in the channel map [True,False]. If it is not given, set it to False
-    parameters['chanmapoutdir']=config.get('CHANMAP','outputdir') if config.has_option('CHANMAP','outputdir') else None #output directory to save the channel map plot. If it is not given, set it to None
-    parameters['chanmapoutname']=config.get('CHANMAP','outname') if config.has_option('CHANMAP','outname') else None #output name of the channel map plot (including file extension *.jpg,*.png,*.pdf,...). If it is not given, set it to None
+    parameters['chansig']=config.getfloat('CHANMAP','nsigma',fallback=3) #rms threshold to plot the contours (lowest contours will be nsigma*rms). If it is not given, set it to 3
+    parameters['chanmask']=config.getboolean('CHANMAP','usemask',fallback=False) #use a mask in the channel map [True,False]. If it is not given, set it to False
+    parameters['chanmapoutdir']=config.get('CHANMAP','outputdir',fallback=None) #output directory to save the channel map plot. If it is not given, set it to None
+    parameters['chanmapoutname']=config.get('CHANMAP','outname',fallback=None) #output name of the channel map plot (including file extension *.jpg,*.png,*.pdf,...). If it is not given, set it to None
      
     #CUBEDO section
     parameters['CUBEDO']='----------------- CUBEDO -----------------'
-    parameters['cubedo']=config.get('CUBEDO','datacube') if config.has_option('CUBEDO','datacube') else None #name of the fits file of the data cube including .fits. If empty, is the same of [FITS] datacube. If it is not given, set it to None
-    parameters['operation']=config.get('CUBEDO','operation') if config.has_option('CUBEDO','operation') else None #operation to perform on the cube [blank,clip,crop,cut,extend,mirror,mom0,shuffle,toint]. If it is not given, set it to None
-    parameters['chanmin']=config.getint('CUBEDO','chanmin') if config.has_option('CUBEDO','chanmin') else 0 #first channel for the operations 'blank,cut,mom0'. If it is not given, set it to 0
-    parameters['chanmax']=config.getint('CUBEDO','chanmax') if config.has_option('CUBEDO','chanmax') else None #last channel for the operations 'blank,cut,mom0'. If it is not given, set it to None
+    parameters['cubedo']=config.get('CUBEDO','datacube',fallback=None) #name of the fits file of the data cube including .fits. If empty, is the same of [FITS] datacube. If it is not given, set it to None
+    parameters['operation']=config.get('CUBEDO','operation',fallback=None) #operation to perform on the cube [blank,clip,crop,cut,extend,mirror,mom0,shuffle,toint]. If it is not given, set it to None
+    parameters['chanmin']=config.getint('CUBEDO','chanmin',fallback=0) #first channel for the operations 'blank,cut,mom0'. If it is not given, set it to 0
+    parameters['chanmax']=config.getint('CUBEDO','chanmax',fallback=None) #last channel for the operations 'blank,cut,mom0'. If it is not given, set it to None
     parameters['inbox']=config.get('CUBEDO','box').split(',') if config.has_option('CUBEDO','box') else None #comma-separated pixel edges of the box to extract for operation 'cut' in the format [xmin,xmax,ymin,ymax]. If it is not given, set it to None
     if parameters['inbox'] != [''] and parameters['inbox'] is not None: #if the box is given
         parameters['inbox']=[int(i) for i in parameters['inbox']] #convert string to float
-    parameters['addchan']=config.getint('CUBEDO','addchan') if config.has_option('CUBEDO','addchan') else None #number of channels to add in operation 'extend'. Negative values add lower channels, positive add higher channels. If it is not given, set it to None
-    parameters['value']=config.get('CUBEDO','value') if config.has_option('CUBEDO','value') else 'blank' #value to assign to blank pixel in operation 'blank' (blank is np.nan). If it is not given, set it to 'blank'
+    parameters['addchan']=config.getint('CUBEDO','addchan',fallback=None) #number of channels to add in operation 'extend'. Negative values add lower channels, positive add higher channels. If it is not given, set it to None
+    parameters['value']=config.get('CUBEDO','value',fallback='blank') #value to assign to blank pixel in operation 'blank' (blank is np.nan). If it is not given, set it to 'blank'
     if parameters['value'] != 'blank': #if the value is not blank
         parameters['value']=float(parameters['value']) #convert it to float
-    parameters['withmask']=config.getboolean('CUBEDO','usemask') if config.has_option('CUBEDO','usemask') else False #use a 2D mask in the operation 'clip' [True,False]. If it is not given, set it to False
-    parameters['cubedomask']=config.get('CUBEDO','mask') if config.has_option('CUBEDO','mask') else None #name of the fits file of the 2D mask including .fits. If empty, is the same of [FITS] mask2d. If it is not given, set it to None
-    parameters['cliplevel']=config.getfloat('CUBEDO','cliplevel') if config.has_option('CUBEDO','cliplevel') else 0.5 #clip threshold as % of the peak (0.5 is 50%) for operation 'clip'. If it is not given, set it to 0.5
-    parameters['xrot']=config.getfloat('CUBEDO','xrot') if config.has_option('CUBEDO','xrot') else None #x-coordinate of the rotational center for operation 'mirror'. If it is not given, set it to None
-    parameters['yrot']=config.getfloat('CUBEDO','yrot') if config.has_option('CUBEDO','yrot') else None #y-coordinate of the rotational center for operation 'mirror'. If it is not given, set it to None
-    parameters['zrot']=config.getint('CUBEDO','zrot') if config.has_option('CUBEDO','zrot') else None #z-coordinate of the rotational center for operation 'mirror'. If it is not given, set it to None
-    parameters['cubedooutdir']=config.get('CUBEDO','outputdir') if config.has_option('CUBEDO','outputdir') else None #output directory to save the new cube. If empty, is the same as [INPUT] path. If it is not given, set it to None
-    parameters['cubedooutname']=config.get('CUBEDO','outname') if config.has_option('CUBEDO','outname') else None #output name of the new cube including extension .fits. If empty, is the same of datacube. If it is not given, set it to None
+    parameters['withmask']=config.getboolean('CUBEDO','usemask',fallback=False) #use a 2D mask in the operation 'clip' [True,False]. If it is not given, set it to False
+    parameters['cubedomask']=config.get('CUBEDO','mask',fallback=None) #name of the fits file of the 2D mask including .fits. If empty, is the same of [FITS] mask2d. If it is not given, set it to None
+    parameters['cliplevel']=config.getfloat('CUBEDO','cliplevel',fallback=0.5) #clip threshold as % of the peak (0.5 is 50%) for operation 'clip'. If it is not given, set it to 0.5
+    parameters['xrot']=config.getfloat('CUBEDO','xrot',fallback=None) #x-coordinate of the rotational center for operation 'mirror'. If it is not given, set it to None
+    parameters['yrot']=config.getfloat('CUBEDO','yrot',fallback=None) #y-coordinate of the rotational center for operation 'mirror'. If it is not given, set it to None
+    parameters['zrot']=config.getint('CUBEDO','zrot',fallback=None) #z-coordinate of the rotational center for operation 'mirror'. If it is not given, set it to None
+    parameters['cubedooutdir']=config.get('CUBEDO','outputdir',fallback=None) #output directory to save the new cube. If empty, is the same as [INPUT] path. If it is not given, set it to None
+    parameters['cubedooutname']=config.get('CUBEDO','outname',fallback=None) #output name of the new cube including extension .fits. If empty, is the same of datacube. If it is not given, set it to None
         
     #CUBESTAT section 
     parameters['CUBESTAT']='----------------- CUBESTAT -----------------'
-    parameters['nsigma']=config.getfloat('CUBESTAT','nsigma') if config.has_option('CUBESTAT','nsigma') else 3 #rms threshold in terms of nsigma*rms for detection limit. If it is not given, set it to 3
-    parameters['cs_statistics']=config.get('CUBESTAT','statistics') if config.has_option('CUBESTAT','statistics') else 'mad' #statistic to be used in the noise measurement. If it is not given, set it to mad
+    parameters['nsigma']=config.getfloat('CUBESTAT','nsigma',fallback=3) #rms threshold in terms of nsigma*rms for detection limit. If it is not given, set it to 3
+    parameters['cs_statistics']=config.get('CUBESTAT','statistics',fallback='mad') #statistic to be used in the noise measurement. If it is not given, set it to mad
     
     #FITSARITH section
     parameters['FITSARITH']='----------------- FITSARITH -----------------'
-    parameters['fits1']=config.get('FITSARITH','fits1') if config.has_option('FITSARITH','fits1') else None #name of reference fits file including .fits. If it is not given, set it to None
-    parameters['fits2']=config.get('FITSARITH','fits2') if config.has_option('FITSARITH','fits2') else None #name of second fits file including .fits. If it is not given, set it to None
-    parameters['fitsoperation']=config.get('FITSARITH','operation') if config.has_option('FITSARITH','operation') else None #operation to do between the two fits [sum,sub,mul,div]. If it is not given, set it to None
-    parameters['fitsarithoutdir']=config.get('FITSARITH','outputdir') if config.has_option('FITSARITH','outputdir') else None #output directory to save the new cube. If empty, is the same as [INPUT] path. If it is not given, set it to None
-    parameters['fitsarithoutname']=config.get('FITSARITH','outname') if config.has_option('FITSARITH','outname') else None #output name of the new fits file including extension .fits. If it is not given, set it to None
+    parameters['fits1']=config.get('FITSARITH','fits1',fallback=None) #name of reference fits file including .fits. If it is not given, set it to None
+    parameters['fits2']=config.get('FITSARITH','fits2',fallback=None) #name of second fits file including .fits. If it is not given, set it to None
+    parameters['fitsoperation']=config.get('FITSARITH','operation',fallback=None) #operation to do between the two fits [sum,sub,mul,div]. If it is not given, set it to None
+    parameters['fitsarithoutdir']=config.get('FITSARITH','outputdir',fallback=None) #output directory to save the new cube. If empty, is the same as [INPUT] path. If it is not given, set it to None
+    parameters['fitsarithoutname']=config.get('FITSARITH','outname',fallback=None) #output name of the new fits file including extension .fits. If it is not given, set it to None
 
     #FIXMASK section
     parameters['FIXMASK']='----------------- FIXMASK -----------------'
-    parameters['refcube']=config.get('FIXMASK','datacube') if config.has_option('FIXMASK','datacube') else None #name of the fits file of the reference data cube including .fits. If empty, is the same of [FITS] datacube. If it is not given, set it to None
-    parameters['masktofix']=config.get('FIXMASK','maskcube') if config.has_option('FIXMASK','maskcube') else None #name of the fits file of the mask cube including .fits. If empty, is the same of [FITS] maskcube. If it is not given, set it to None
-    parameters['fixmaskoutdir']=config.get('FIXMASK','outputdir') if config.has_option('FIXMASK','outputdir') else None #output directory to save the new mask. If empty, is the same as [INPUT] path. If it is not given, set it to None
-    parameters['fixmaskoutname']=config.get('FIXMASK','outname') if config.has_option('FIXMASK','outname') else None #output name of the new mask including extension .fits. If empty, is the same of maskcube. If it is not given, set it to None
+    parameters['refcube']=config.get('FIXMASK','datacube',fallback=None) #name of the fits file of the reference data cube including .fits. If empty, is the same of [FITS] datacube. If it is not given, set it to None
+    parameters['masktofix']=config.get('FIXMASK','maskcube',fallback=None) #name of the fits file of the mask cube including .fits. If empty, is the same of [FITS] maskcube. If it is not given, set it to None
+    parameters['fixmaskoutdir']=config.get('FIXMASK','outputdir',fallback=None) #output directory to save the new mask. If empty, is the same as [INPUT] path. If it is not given, set it to None
+    parameters['fixmaskoutname']=config.get('FIXMASK','outname',fallback=None) #output name of the new mask including extension .fits. If empty, is the same of maskcube. If it is not given, set it to None
     
     #GAUSSFIT section
     parameters['GAUSSFIT']='----------------- GAUSSFIT -----------------'
-    parameters['cubetofit']=config.get('GAUSSFIT','datacube') if config.has_option('GAUSSFIT','datacube') else None #name of the fits file of the data cube to fit including .fits. If empty, is the same of [FITS] datacube. If it is not given, set it to None
-    parameters['gaussmask']=config.get('GAUSSFIT','gaussmask') if config.has_option('GAUSSFIT','gaussmask') else None #name of the fits file of the mask cube including .fits. If empty, is the same of [FITS] maskcube. The fit will be done inside the mask. If it is not given, set it to None
-    parameters['linefwhm']=config.getfloat('GAUSSFIT','linefwhm') if config.has_option('GAUSSFIT','linefwhm') else 15 #first guess on the fwhm of the line profile in km/s. If it is not given, set it to 15
-    parameters['amp_thresh']=config.getfloat('GAUSSFIT','amp_thresh') if config.has_option('GAUSSFIT','amp_thresh') else 0 #amplitude threshold for the fit. If a profile peak is < threshold, the fit wont be performed on that spectrum. If it is not given, set it to 0
-    parameters['p_reject']=config.getfloat('GAUSSFIT','p_reject') if config.has_option('GAUSSFIT','p_reject') else 1 #p-value threshold for fit rejection. If a best-fit as p>p_reject, it will be rejected . If it is not given, set it to 1
-    parameters['clipping']=config.getboolean('GAUSSFIT','clipping') if config.has_option('GAUSSFIT','clipping') else False #clip the spectrum to a % of the profile peak [True,False]. If it is not given, set it to False
-    parameters['clipthreshold']=config.getfloat('GAUSSFIT','threshold') if config.has_option('GAUSSFIT','threshold') else 0.5 #clip threshold as % of the peak (0.5 is 50%) if clipping is True. If it is not given, set it to 0.5
-    parameters['errors']=config.getboolean('GAUSSFIT','errors') if config.has_option('GAUSSFIT','errors') else False #compute the errors on the best-fit [True,False]. If it is not given, set it to False
-    parameters['write_field']=config.getboolean('GAUSSFIT','write_field') if config.has_option('GAUSSFIT','write_field') else False #compute the best-fit velocity field [True,False]. If it is not given, set it to False
-    parameters['gaussoutdir']=config.get('GAUSSFIT','outputdir') if config.has_option('GAUSSFIT','outputdir') else None #output directory to save the model cube. If empty, is the same as [INPUT] path. If it is not given, set it to None
-    parameters['gaussoutname']=config.get('GAUSSFIT','outname') if config.has_option('GAUSSFIT','outname') else None #output name of the model cube including extension .fits. If it is not given, set it to None
+    parameters['cubetofit']=config.get('GAUSSFIT','datacube',fallback=None) #name of the fits file of the data cube to fit including .fits. If empty, is the same of [FITS] datacube. If it is not given, set it to None
+    parameters['gaussmask']=config.get('GAUSSFIT','gaussmask',fallback=None) #name of the fits file of the mask cube including .fits. If empty, is the same of [FITS] maskcube. The fit will be done inside the mask. If it is not given, set it to None
+    parameters['linefwhm']=config.getfloat('GAUSSFIT','linefwhm',fallback=15) #first guess on the fwhm of the line profile in km/s. If it is not given, set it to 15
+    parameters['amp_thresh']=config.getfloat('GAUSSFIT','amp_thresh',fallback=0) #amplitude threshold for the fit. If a profile peak is < threshold, the fit wont be performed on that spectrum. If it is not given, set it to 0
+    parameters['p_reject']=config.getfloat('GAUSSFIT','p_reject',fallback=1) #p-value threshold for fit rejection. If a best-fit as p>p_reject, it will be rejected . If it is not given, set it to 1
+    parameters['clipping']=config.getboolean('GAUSSFIT','clipping',fallback=False) #clip the spectrum to a % of the profile peak [True,False]. If it is not given, set it to False
+    parameters['clipthreshold']=config.getfloat('GAUSSFIT','threshold',fallback=0.5) #clip threshold as % of the peak (0.5 is 50%) if clipping is True. If it is not given, set it to 0.5
+    parameters['errors']=config.getboolean('GAUSSFIT','errors',fallback=False) #compute the errors on the best-fit [True,False]. If it is not given, set it to False
+    parameters['write_field']=config.getboolean('GAUSSFIT','write_field',fallback=False) #compute the best-fit velocity field [True,False]. If it is not given, set it to False
+    parameters['gaussoutdir']=config.get('GAUSSFIT','outputdir',fallback=None)
+    parameters['gaussoutname']=config.get('GAUSSFIT','outname',fallback=None) #output name of the model cube including extension .fits. If it is not given, set it to None
 
     #GETPV section
     parameters['GETPV']='----------------- GETPV -----------------'
-    parameters['pvcube']=config.get('GETPV','datacube') if config.has_option('GETPV','datacube') else None #name of the fits file of the data cube including .fits. If empty, is the same of [FITS] datacube. If it is not given, set it to None
-    parameters['pvwidth']=config.getfloat('GETPV','width') if config.has_option('GETPV','width') else None #width of the slice in arcsec. If not given, will be the beam size. If it is not given, set it to None
+    parameters['pvcube']=config.get('GETPV','datacube',fallback=None) #name of the fits file of the data cube including .fits. If empty, is the same of [FITS] datacube. If it is not given, set it to None
+    parameters['pvwidth']=config.getfloat('GETPV','width',fallback=None) #width of the slice in arcsec. If not given, will be the beam size. If it is not given, set it to None
     parameters['pvpoints']=config.get('GETPV','points').split(',') if config.has_option('GETPV','points') else None #RA-DEC comma-separated coordinate of the slice points in decimal degree. If two are given ([x,y]), it is assumed they are the center of the slice. Else, they need to be the starting and ending coordinates ([xmin,xmax,ymin,ymax]). If it is not given, set it to None
     if parameters['pvpoints'] != [''] and parameters['pvpoints'] is not None: #if the pv points are given
         parameters['pvpoints']=[float(i) for i in parameters['pvpoints']] #convert string to float
-    parameters['pvangle']=config.getfloat('GETPV','angle') if config.has_option('GETPV','angle') else None #position angle of the slice in degree. If not given, will be the object position angle. If it is not given, set it to None
-    parameters['pvchmin']=config.getint('GETPV','chanmin') if config.has_option('GETPV','chanmin') else 0 #starting channel of the slice. If it is not given, set it to 0
-    parameters['pvchmax']=config.getint('GETPV','chanmax') if config.has_option('GETPV','chanmax') else None #ending channel of the slice. If it is not given, set it to None
-    parameters['pv_statistics']=config.get('GETPV','statistics') if config.has_option('GETPV','statistics') else 'mad' #statistic to be used in the noise measurement. If it is not given, set it to mad
-    parameters['pvoutdir']=config.get('GETPV','outputdir') if config.has_option('GETPV','outputdir') else None #output directory to save the fits and the plot. If empty, is the same as [INPUT] path. If it is not given, set it to None
-    parameters['fitsoutname']=config.get('GETPV','fitsoutname') if config.has_option('GETPV','fitsoutname') else None #output name of the pv fits file including extension .fits. If it is not given, set it to None
-    parameters['plotoutname']=config.get('GETPV','plotoutname') if config.has_option('GETPV','plotoutname') else None #output name of the pv plot (including file extension *.jpg,*.png,*.pdf,...). If it is not given, set it to None
-    parameters['subtitle']=config.get('GETPV','subtitle') if config.has_option('GETPV','subtitle') else None #optional subtitle for the pv plot. If it is not given, set it to None
-    parameters['pvsig']=config.getfloat('GETPV','nsigma') if config.has_option('GETPV','nsigma') else 3 #rms threshold to plot the contours (lowest contours will be nsigma*rms). If it is not given, set it to 3
+    parameters['pvangle']=config.getfloat('GETPV','angle',fallback=None) #position angle of the slice in degree. If not given, will be the object position angle. If it is not given, set it to None
+    parameters['pvchmin']=config.getint('GETPV','chanmin',fallback=0) #starting channel of the slice. If it is not given, set it to 0
+    parameters['pvchmax']=config.getint('GETPV','chanmax',fallback=None)#ending channel of the slice. If it is not given, set it to None
+    parameters['pv_statistics']=config.get('GETPV','statistics',fallback='mad') #statistic to be used in the noise measurement. If it is not given, set it to mad
+    parameters['pvoutdir']=config.get('GETPV','outputdir',fallback=None) #output directory to save the fits and the plot. If empty, is the same as [INPUT] path. If it is not given, set it to None
+    parameters['fitsoutname']=config.get('GETPV','fitsoutname',fallback=None) #output name of the pv fits file including extension .fits. If it is not given, set it to None
+    parameters['plotoutname']=config.get('GETPV','plotoutname',fallback=None) #output name of the pv plot (including file extension *.jpg,*.png,*.pdf,...). If it is not given, set it to None
+    parameters['subtitle']=config.get('GETPV','subtitle',fallback=None) #optional subtitle for the pv plot. If it is not given, set it to None
+    parameters['pvsig']=config.getfloat('GETPV','nsigma',fallback=3) #rms threshold to plot the contours (lowest contours will be nsigma*rms). If it is not given, set it to 3
           
     #LINESFINDER section
     parameters['LINESFINDER']='----------------- LINESFINDER -----------------'     
@@ -320,57 +342,66 @@ def importparameters(parameterfile):
         parameters['smooth_kernel']=[int(i) for i in parameters['smooth_kernel']] #convert string to int
         if len(parameters['smooth_kernel'])==1: #if only 1 kernel is provided
             parameters['smooth_kernel']=parameters['smooth_kernel'][0] #convert to single float
-    parameters['sc_threshold']=config.getfloat('LINESFINDER','threshold') if config.has_option('LINESFINDER','threshold') else 3 #number of rms to reject flux values in the source finder. If it is not given, set it to None
-    parameters['sc_replace']=config.getfloat('LINESFINDER','replace') if config.has_option('LINESFINDER','replace') else 2 #before smoothing the spectrum during n source finder iteration, every flux value that was already detected in a previous iteration will be replaced by this value multiplied by the original noise level. If it is not given, set it to 2
-    parameters['sc_fluxrange']=config.get('LINESFINDER','fluxrange') if config.has_option('LINESFINDER','fluxrange') else 'negative' #flux range to be used in the noise measurement of the source finder.. If it is not given, set it to negative
-    parameters['sc_statistics']=config.get('LINESFINDER','statistics') if config.has_option('LINESFINDER','statistics') else 'mad' #statistic to be used in the noise measurement process of the source finder. If it is not given, set it to mad
-    parameters['link_kernel']=config.getint('LINESFINDER','link_ker') if config.has_option('LINESFINDER','link_ker') else 3 #minimum odd number of channels covered by a spectral line. If it is not given, set it to 3
-    parameters['rel_snrmin']=config.getfloat('LINESFINDER','rel_snrmin') if config.has_option('LINESFINDER','rel_snrmin') else 3 #minimum SNR of a detected line to be reliable. If it is not given, set it to 3
-    parameters['rel_threshold']=config.getfloat('LINESFINDER','rel_thresh') if config.has_option('LINESFINDER','rel_thresh') else 0 #minimum value (from 0 to 1) of the reliability to consider a source reliable. Set to 0 to disable the reliability calculation. If it is not given, set it to 0     
-    parameters['finderoutdir']=config.get('LINESFINDER','outputdir') if config.has_option('LINESFINDER','outputdir') else None #output directory to save the fits file. If empty, is the same as [INPUT] path. If it is not given, set it to None
-    parameters['finderoutname']=config.get('LINESFINDER','outname') if config.has_option('LINESFINDER','outname') else None #output name of the new fits file including extension .fits. If it is not given, set it to None
+    parameters['sc_threshold']=config.getfloat('LINESFINDER','threshold',fallback=3) #number of rms to reject flux values in the source finder. If it is not given, set it to None
+    parameters['sc_replace']=config.getfloat('LINESFINDER','replace',fallback=2) #before smoothing the spectrum during n source finder iteration, every flux value that was already detected in a previous iteration will be replaced by this value multiplied by the original noise level. If it is not given, set it to 2
+    parameters['sc_fluxrange']=config.get('LINESFINDER','fluxrange',fallback='negative') #flux range to be used in the noise measurement of the source finder. If it is not given, set it to negative
+    parameters['sc_statistics']=config.get('LINESFINDER','statistics',fallback='mad') #statistic to be used in the noise measurement process of the source finder. If it is not given, set it to mad
+    parameters['link_kernel']=config.getint('LINESFINDER','link_ker',fallback=3) #minimum odd number of channels covered by a spectral line. If it is not given, set it to 3
+    parameters['separation']=config.getint('LINESFINDER','separation',fallback=3) #maximum channel separation between two sources to be considered a single source. If not given, set it to 3
+    parameters['rel_snrmin']=config.getfloat('LINESFINDER','rel_snrmin',fallback=3) #minimum SNR of a detected line to be reliable. If it is not given, set it to 3
+    parameters['rel_threshold']=config.getfloat('LINESFINDER','rel_thresh',fallback=0) #minimum value (from 0 to 1) of the reliability to consider a source reliable. Set to 0 to disable the reliability calculation. If it is not given, set it to 0
+    parameters['keep_negative']=config.getboolean('LINESFINDER','negative',fallback=True) #don't discard detections with negative flux at the end of the process. If it is not given, set it to True    
+    parameters['gaussianity']=config.getboolean('LINESFINDER','gauss_tests',fallback=False) #if set to True, two statistical tests (Anderson-Darling and Kanekar) will be performed to quantify the gaussianity of the noise in the input spectra. If not given, set it to False
+    parameters['p_value']=config.getfloat('LINESFINDER','p-value',fallback=0.05) #p-value threshold of the Anderson-Darling test to reject non-Gaussian spectra (a spectrum has Gaussian noise if p>p_value). If not given, set it to 0.05  
+    parameters['kanekar_threshold']=config.get('LINESFINDER','kanekar').split(',') if config.has_option('LINESFINDER','kanekar') else [0.8,1.16] #an array like of two float elements representing the minimum and maximum value of the Kanekar test to reject non-Gaussian spectra (a spectrum has Gaussian noise if kanekar_min<test_value<kanekar_max). If not given, set it to None
+    if len(parameters['kanekar_threshold']) == 2: #if two elements are given
+        parameters['kanekar_threshold']=[float(i) for i in parameters['kanekar_threshold']] #convert string to float
+    else:
+        parameters['kanekar_threshold']=[0.8,1.16] #set to the default values
+    parameters['write_catalogue']=config.getboolean('LINESFINDER','catalogue',fallback=False) #option to write the source catalague as csv file. If it is not given, set it to False  
+    parameters['finderoutdir']=config.get('LINESFINDER','outputdir',fallback=None) #output directory to save the fits file. If empty, is the same as [INPUT] path. If it is not given, set it to None
+    parameters['finderoutname']=config.get('LINESFINDER','outname',fallback=None) #output name of the new fits file including extension .fits. If it is not given, set it to None
            
     #PLOTMOM section
     parameters['PLOTMOM']='----------------- PLOTMOM -----------------'
-    parameters['subtitle']=config.get('PLOTMOM','subtitle') if config.has_option('PLOTMOM','subtitle') else None #optional subtitle for the plot. If it is not given, set it to None
-    parameters['plotmomoutdir']=config.get('PLOTMOM','outputdir') if config.has_option('PLOTMOM','outputdir') else None #output directory to save the plot. If empty, is the same as [INPUT] path. If it is not given, set it to None
-    parameters['plotmomoutname']=config.get('PLOTMOM','outname') if config.has_option('PLOTMOM','outname') else None #output name of the plot (including file extension *.jpg,*.png,*.pdf,...). If it is not given, set it to None
+    parameters['subtitle']=config.get('PLOTMOM','subtitle',fallback=None) #optional subtitle for the plot. If it is not given, set it to None
+    parameters['plotmomoutdir']=config.get('PLOTMOM','outputdir',fallback=None) #output directory to save the plot. If empty, is the same as [INPUT] path. If it is not given, set it to None
+    parameters['plotmomoutname']=config.get('PLOTMOM','outname',fallback=None) #output name of the plot (including file extension *.jpg,*.png,*.pdf,...). If it is not given, set it to None
             
     #REMOVEMOD section
     parameters['REMOVEMOD']='----------------- REMOVEMOD -----------------'
-    parameters['method']=config.get('REMOVEMOD','method') if config.has_option('REMOVEMOD','method') else 'subtraction' #method to remove the model [all,blanking,b+s,negblank,subtraction]. If it is not given, set it to 'subtraction'
-    parameters['blankthreshold']=config.getfloat('REMOVEMOD','threshold') if config.has_option('REMOVEMOD','threshold') else 0 #flux threshold for the 'all,blanking,b+s' methods in units of cube flux. If it is not given, set it to 0
-    parameters['removemodoutdir']=config.get('REMOVEMOD','outputdir') if config.has_option('REMOVEMOD','outputdir') else None #output directory to save the fits file. If empty, is the same as [INPUT] path. If it is not given, set it to None
-    parameters['removemodoutname']=config.get('REMOVEMOD','outname') if config.has_option('REMOVEMOD','outname') else None #output name of the new fits file including extension .fits. If it is not given, set it to None
+    parameters['method']=config.get('REMOVEMOD','method',fallback='subtraction') #method to remove the model [all,blanking,b+s,negblank,subtraction]. If it is not given, set it to 'subtraction'
+    parameters['blankthreshold']=config.getfloat('REMOVEMOD','threshold',fallback=0) #flux threshold for the 'all,blanking,b+s' methods in units of cube flux. If it is not given, set it to 0
+    parameters['removemodoutdir']=config.get('REMOVEMOD','outputdir',fallback=None) #output directory to save the fits file. If empty, is the same as [INPUT] path. If it is not given, set it to None
+    parameters['removemodoutname']=config.get('REMOVEMOD','outname',fallback=None) #output name of the new fits file including extension .fits. If it is not given, set it to None
 
     #ROTCURVE section
     parameters['ROTCURVE']='----------------- ROTCURVE -----------------'
     parameters['rotcenter']=config.get('ROTCURVE','center').split(',') if config.has_option('ROTCURVE','center') else None #x-y comma-separated coordinates of the rotational center in pixel. If it is not given, set it to None
     if parameters['rotcenter'] is not None:
         parameters['rotcenter']=[float(i) for i in parameters['rotcenter']] #convert string to float
-    parameters['save_csv']=config.getboolean('ROTCURVE','save_csv') if config.has_option('ROTCURVE','save_csv') else False #store the output in a csv file [True,False]. If it is not given, set it to False
-    parameters['rotcurveoutdir']=config.get('ROTCURVE','outputdir') if config.has_option('ROTCURVE','outputdir') else None #output directory to save the plot. If empty, is the same as [INPUT] path. If it is not given, set it to None
-    parameters['rotcurveoutname']=config.get('ROTCURVE','outname') if config.has_option('ROTCURVE','outname') else None #output name of the plot (including file extension *.jpg,*.png,*.pdf,...). If it is not given, set it to None
+    parameters['save_csv']=config.getboolean('ROTCURVE','save_csv',fallback=False) #store the output in a csv file [True,False]. If it is not given, set it to False
+    parameters['rotcurveoutdir']=config.get('ROTCURVE','outputdir',fallback=None) #output directory to save the plot. If empty, is the same as [INPUT] path. If it is not given, set it to None
+    parameters['rotcurveoutname']=config.get('ROTCURVE','outname',fallback=None) #output name of the plot (including file extension *.jpg,*.png,*.pdf,...). If it is not given, set it to None
 
     #STACKING section
     parameters['STACKING']='----------------- STACKING -----------------'
     parameters['stackcenter']=config.get('STACKING','center').split(',') if config.has_option('STACKING','center') else None #x-y comma-separated coordinates of the galactic center in pixel. If it is not given, set it to None
     if parameters['stackcenter'] is not None:
         parameters['stackcenter']=[float(i) for i in parameters['stackcenter']] #convert string to float
-    parameters['nregions']=config.getint('STACKING','nregions') if config.has_option('STACKING','nregions') else None #number of regions from which the spectra are extracted and stacked. If it is not given, set it to None
-    parameters['shape']=config.get('STACKING','shape') if config.has_option('STACKING','shape') else 'cones' #shape of regions to stack between 'cones' and 'concentric'. If it is not given, set it to 'cones'
+    parameters['nregions']=config.getint('STACKING','nregions',fallback=None) #number of regions from which the spectra are extracted and stacked. If it is not given, set it to None
+    parameters['shape']=config.get('STACKING','shape',fallback='cones') #shape of regions to stack between 'cells', 'cones' and 'concentric'. If it is not given, set it to 'cones'
     parameters['from_to']=config.get('STACKING','radii').split(',') if config.has_option('STACKING','radii') else None #comma-separated min and max radius from the galactic center in pixunits from which the spectra are extracted and stacked. If it is not given, set it to None'
     if parameters['from_to'] is not None:
         parameters['from_to']=[float(i) for i in parameters['from_to']] #convert string to float
     parameters['between_angles']=config.get('STACKING','between').split(',') if config.has_option('STACKING','between') else None #comma-separated min and max angle from which the stacking regions are defined. Set to None to disable. If it is not given, set it to None'
     if parameters['between_angles'] is not None:
         parameters['between_angles']=[float(i) for i in parameters['between_angles']] #convert string to float
-    parameters['weighting']=config.get('STACKING','weighting') if config.has_option('STACKING','weighting') else None #type of weight to apply during the stacking between 'None' and 'rms'. If it is not given, set it to None
-    parameters['emission_width']=config.getfloat('STACKING','gal_range') if config.has_option('STACKING','gal_range') else 200000 #velocity range in specunits to exclude from rms calculation in the stacked spectra. Set to 0 to compute the rms over the whole spectrum. If it is not given, set it to None
-    parameters['regrid']=config.getboolean('STACKING','regrid') if config.has_option('STACKING','regrid') else False #regrid the cube option. If it is not given, set it to False
-    parameters['regrid_size']=config.getint('STACKING','regrid_size') if config.has_option('STACKING','regrid_size') else 3 #how many pixel to regrid. Set to 0 to regrid to a beam. If it is not given, set it to 3
-    parameters['stackoutdir']=config.get('STACKING','outputdir') if config.has_option('STACKING','outputdir') else None #output directory to save the plot. If empty, is the same as [INPUT] path. If it is not given, set it to None
-    parameters['stackoutname']=config.get('STACKING','outname') if config.has_option('STACKING','outname') else None #output name of the plot (including file extension *.jpg,*.png,*.pdf,...). If it is not given, set it to None
+    parameters['weighting']=config.get('STACKING','weighting',fallback=None) #type of weight to apply during the stacking between 'None' and 'rms'. If it is not given, set it to None
+    parameters['stack_fluxrange']=config.get('STACKING','fluxrange',fallback='negative') #flux range to be used in the noise measurement. If it is not given, set it to negative
+    parameters['stack_statistics']=config.get('STACKING','statistics',fallback='mad') #statistic to be used in the noise measurement. If it is not given, set it to mad
+    parameters['stackoutdir']=config.get('STACKING','outputdir',fallback=None) #output directory to save the plot. If empty, is the same as [INPUT] path. If it is not given, set it to None
+    parameters['stackoutname']=config.get('STACKING','outname',fallback=None) #output name of the plot (including file extension *.jpg,*.png,*.pdf,...). If it is not given, set it to None
 
     #VELFI section
     parameters['VELFI']='----------------- VELFI -----------------'
@@ -386,15 +417,15 @@ def importparameters(parameterfile):
     parameters['vcenter']=config.get('VELFI','center').split(',') if config.has_option('VELFI','center') else None #x-y comma-separated coordinates of the rotational center in pixel. If it is not given, set it to None
     if parameters['vcenter'] is not None:
         parameters['vcenter']=[float(i) for i in parameters['vcenter']] #convert string to float
-    parameters['extend_only']=config.getboolean('VELFI','extend_only') if config.has_option('VELFI','extend_only') else False #extend a given velocity field (True) or write a new one from scratch (False). If it is not given, set it to False
-    parameters['correct']=config.getboolean('VELFI','correct') if config.has_option('VELFI','correct') else False #correct the input rotation velocities for the inclination angles (True) or not (False). If it is not given, set it to False
-    parameters['velfioutdir']=config.get('VELFI','outputdir') if config.has_option('VELFI','outputdir') else None #output directory to save the fits file. If empty, is the same as [INPUT] path. If it is not given, set it to None
-    parameters['velfioutname']=config.get('VELFI','outname') if config.has_option('VELFI','outname') else None #output name of the fits file including .fits. If it is not given, set it to None
+    parameters['extend_only']=config.getboolean('VELFI','extend_only',fallback=False) #extend a given velocity field (True) or write a new one from scratch (False). If it is not given, set it to False
+    parameters['correct']=config.getboolean('VELFI','correct',fallback=False) #correct the input rotation velocities for the inclination angles (True) or not (False). If it is not given, set it to False
+    parameters['velfioutdir']=config.get('VELFI','outputdir',fallback=None) #output directory to save the fits file. If empty, is the same as [INPUT] path. If it is not given, set it to None
+    parameters['velfioutname']=config.get('VELFI','outname',fallback=None)#output name of the fits file including .fits. If it is not given, set it to None
     
     #PLOTSTYLE section
     parameters['PLOTSTYLE']='----------------- PLOTSTYLE -----------------'
-    parameters['ctr_width']=config.getfloat('PLOTSTYLE','ctr width') if config.has_option('PLOTSTYLE','ctr width') else 2 #width of the contours levels. If it is not given, set it to 2
-    parameters['plot_format']=config.getfloat('PLOTSTYLE','format') if config.has_option('PLOTSTYLE','format') else 'pdf' #file format for the plots. If it is not given, set it to pdf
+    parameters['ctr_width']=config.getfloat('PLOTSTYLE','ctr width',fallback=2) #width of the contours levels. If it is not given, set it to 2
+    parameters['plot_format']=config.getfloat('PLOTSTYLE','format',fallback='pdf') #file format for the plots. If it is not given, set it to pdf
             
     return parameters
 
@@ -403,63 +434,63 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
     """Plot the channel maps of a data cube in a defined channel range every given number of channels.
 
     Args:
-        datacube (string/ndarray): name or path+name of the fits data cube
-        from_chan (int): first channel to be plotted in the channel map
-        to_chan (int): last channel to be plotted in the channel map
-        chansep (int): channel separation in the channel map. The channels plotted are from from_chan to to_chan each chansep
-        chanmask (bool): option to use a detection mask (True) or not (False) to highlight the 'real' emission in the channel map. If it is True, a 3D mask must be provided using the 'maskcube' kwarg (see kwargs arguments below)
-        chanmapoutdir (string): the output folder name
-        chanmapoutname (string): output file name
-        save (bool): option to save the plot (True) or not (False)
+        datacube (str/ndarray): Name or path+name of the FITS data cube.
+        from_chan (int): First channel to be plotted in the channel map.
+        to_chan (int): Last channel to be plotted in the channel map.
+        chansep (int): Channel separation in the channel map. The channels plotted are from from_chan to to_chan, with a separation of chansep.
+        chanmask (bool): Option to use a detection mask (True) or not (False) to highlight the 'real' emission in the channel map. If True, a 3D mask must be provided using the 'maskcube' kwarg (see kwargs arguments below).
+        chanmapoutdir (str): Output folder name.
+        chanmapoutname (str): Output file name.
+        save (bool): Option to save the plot (True) or not (False).
 
     Kwargs:
-        path (string): path to the data cube if the datacube is a name and not a path+name
-        maskcube (string/ndarray): name or path+name of the fits 3D mask cube. Used if chanmask=True
-        pixunits (string): string with the spatial units (Default: None). Accepted values:
+        path (str): Path to the data cube if the datacube is a name and not a path+name.
+        maskcube (str/ndarray): Name or path+name of the FITS 3D mask cube. Used if chanmask=True.
+        pixunits (str): String with the spatial units (Default: None). Accepted values:
             - None (it will try to retrieve them from the cube header)
             - deg
-            - armin
+            - arcmin
             - arcsec
-        specunits (string): string with the spectral units (Default: None). Accepted values:
+        specunits (str): String with the spectral units (Default: None). Accepted values:
             - None (it will try to retrieve them from the cube header)
             - km/s
             - m/s
             - Hz
-        pixelres (float): cube spatial resolution in pixunits (Default: None)
-        spectralres (float): cube spectral resolution in specunits (Default: None)
-        bmaj (float): beam major axis in arcsec in pixunits (Default: None)
-        bmin (float): beam minor axis in arcsec in pixunits (Default: None)
-        bpa (float): beam position angle in degree (Default: None)
-        rms (float): rms of the data cube as a float (Default: None)
-        chanbox (array-like): spatial box as [xmin,xmax,ymin,ymax] (Default: None)                     
-        vsys (float): object systemic velocity in m/s (Default: 0)
-        asectokpc (float): arcsec to kpc conversion to plot the spatial scale (Default: None)
-        objname (string): name of the object (Default: '')
-        contours (array-like): contour levels in units of rms. They will replace the default levels (Default: None)                                    
-        chansig (float): lowest contour level in terms of chansig*rms (Default: 3)
-        ctr_width (float): line width of the contours (Default: 2)
-        plot_format (string): file format of the plots
-        verbose (bool): option to print messages and plot to terminal if True (Default: None)
+        pixelres (float): Cube spatial resolution in pixunits (Default: None).
+        spectralres (float): Cube spectral resolution in specunits (Default: None).
+        bmaj (float): Beam major axis in arcsec in pixunits (Default: None).
+        bmin (float): Beam minor axis in arcsec in pixunits (Default: None).
+        bpa (float): Beam position angle in degrees (Default: None).
+        rms (float): RMS of the data cube as a float (Default: None).
+        chanbox (array-like): Spatial box as [xmin, xmax, ymin, ymax] (Default: None).
+        vsys (float): Object systemic velocity in m/s (Default: 0).
+        asectokpc (float): Arcsec to kpc conversion to plot the spatial scale (Default: None).
+        objname (str): Name of the object (Default: '').
+        contours (array-like): Contour levels in units of rms. They will replace the default levels (Default: None).
+        chansig (float): Lowest contour level in terms of chansig * rms (Default: 3).
+        ctr_width (float): Line width of the contours (Default: 2).
+        plot_format (str): File format of the plots.
+        verbose (bool): Option to print messages and plot to terminal if True (Default: None).
 
     Returns:
         None
-    
+
     Raises:
-        ValueError: If no data cube is provided
-        ValueError: If no path is provided
-        ValueError: If no mask cube is provided when chanmask is True
-        ValueError: If wrong spatial units are provided
-        ValueError: If wrong spectral units are provided
-        ValueError: If no spectral information is available through the input arguments or the cube header
-        ValueError: If mask cube and data cube dimensions do not match
-        ValueError: If size of spatial box is not 4
+        ValueError: If no data cube is provided.
+        ValueError: If no path is provided.
+        ValueError: If no mask cube is provided when chanmask is True.
+        ValueError: If wrong spatial units are provided.
+        ValueError: If wrong spectral units are provided.
+        ValueError: If no spectral information is available through the input arguments or the cube header.
+        ValueError: If mask cube and data cube dimensions do not match.
+        ValueError: If size of spatial box is not 4.
     """
     #CHECK THE INPUT#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
-    format='.'+kwargs['plot_format'] if 'plot_format' in kwargs else '.pdf'
+    verbose=kwargs.get('verbose',False)
+    plot_format='.'+kwargs.get('plot_format','pdf')
     datacube=__read_string(datacube,'datacube',**kwargs) #store the path to the data cube
     if chanmask: #if a mask cube is used
-        maskcube=kwargs['maskcube'] if 'maskcube' in kwargs else None
+        maskcube=kwargs.get('maskcube',None)
         if maskcube is None: #if no masckcube is provided
             chanmask=False #set to False the switch to use the mask
             if verbose:
@@ -468,44 +499,37 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
             maskcube=__read_string(maskcube,'maskcube',**kwargs)  #store the path to the data cube
     outdir=chanmapoutdir #store the output directory from the input parameters
     if outdir == '' or outdir is None:  #if the outdir is empty
-        outdir=kwargs['path'] if 'path' in kwargs else os.getcwd()+'/' #the outdir is the input folder
+        outdir=kwargs.get('path',os.getcwd()+'/') #the outdir is the input folder
     elif not os.path.exists(outdir): #if the output folder does not exist
         os.makedirs(outdir) #create the folder  
     outname=chanmapoutname #store the output name from the input parameters
     if outname == '' or outname is None:  #if the outname is empty
-        outname=datacube.replace('.fits','_chanmap'+format)  #the outname is the object name plus chanmap.pdf
+        outname=datacube.replace('.fits','_chanmap'+plot_format)  #the outname is the object name plus chanmap.pdf
     if outname[0] != '.': #if the outname name start with a . means that it is a path to the cube (so differs from path parameter)
-        outname=outdir+outname+format
+        outname=outdir+outname+plot_format
     #CHECK THE KWARGS#
-    pixunits=kwargs['pixunits'] if 'pixunits' in kwargs else None
+    pixunits=kwargs.get('pixunits',None)
     if pixunits not in [None,'deg','arcmin','arcsec']: #if wrong spatial units are given
         raise ValueError('ERROR: Please provide the spatial units in deg, arcmin or arcsec. Aborting!')
-    specunits=kwargs['specunits'] if 'specunits' in kwargs else None
+    specunits=kwargs.get('specunits',None)
     if specunits not in [None,'km/s','m/s','Hz']: #if wrong spatial units are given
         raise ValueError('ERROR: Please provide the spectral units km/s, m/s or Hz. Aborting!')   
-    pixelres=kwargs['pixelres'] if 'pixelres' in kwargs else None
-    spectralres=kwargs['spectralres'] if 'spectralres' in kwargs else None
-    bmaj=kwargs['bmaj'] if 'bmaj' in kwargs else None
-    bmin=kwargs['bmin'] if 'bmin' in kwargs else None
-    bpa=kwargs['bpa'] if 'bpa' in kwargs else None
-    rms=kwargs['rms'] if 'rms' in kwargs else None
-    chanbox=kwargs['chanbox'] if 'chanbox' in kwargs else None
-    if 'vsys' in kwargs: #if the systemic velocity is in the input kwargs
-        if kwargs['vsys'] is not None: #if it is also not None
-            vsys=kwargs['vsys'] #store the systemic velocity from the input kwargs
-        else:
-            vsys=0 #set it to 0
-            warnings.warn('No systemic velocity is given: set it to 0 m/s!')
-    else:
+    pixelres=kwargs.get('pixelres',None)
+    spectralres=kwargs.get('spectralres',None)
+    bmaj=kwargs.get('bmaj',None)
+    bmin=kwargs.get('bmin',None)
+    bpa=kwargs.get('bpa',None)
+    rms=kwargs.get('rms',None)
+    chanbox=kwargs.get('chanbox',None)
+    vsys=kwargs.get('vsys',None)
+    if vsys is None:
         vsys=0 #set it to 0
         warnings.warn('No systemic velocity is given: set it to 0 m/s!')
-    asectokpc=kwargs['asectokpc'] if 'asectokpc' in kwargs else None
-    objname=kwargs['objname'] if 'objname' in kwargs else None
-    if objname is None:
-        objname='' 
-    contours=kwargs['contours'] if 'contours' in kwargs else None
-    chansig=kwargs['chansig'] if 'chansig' in kwargs else 3
-    ctr_width=kwargs['ctr_width'] if 'ctr_width' in kwargs else 2
+    asectokpc=kwargs.get('asectokpc',None)
+    objname=kwargs.get('objname','')
+    contours=kwargs.get('contours',None)
+    chansig=kwargs.get('chansig',3)
+    ctr_width=kwargs.get('ctr_width',2)
 
     #---------------   START THE FUNCTION   ---------------#    
     #OPEN THE DATACUBE#
@@ -604,7 +628,6 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
     nrows=int(np.floor(np.sqrt(len(chans)))) #number of rows in the channel map
     ncols=int(np.floor(np.sqrt(len(chans)))) #number of columns in the channel map
     fig=plt.figure(figsize=(4*ncols,4*nrows)) #create the figure
-    fig.suptitle('{} channel maps'.format(objname),fontsize=24) #add the title
     k=0 #index to run over the channels
     
     #SETUP THE SUBPLOT PROPERTIES#    
@@ -658,7 +681,6 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
         else:
             ax.contour(chanmap/rms,levels=ctr,cmap='hot',linewidths=ctr_width,linestyles='solid') #add the contours
             ax.contour(chanmap/rms,levels=-np.flip(ctr),colors='gray',linewidths=ctr_width,linestyles='dashed') #add the negative contours
-        ax.tick_params(direction='in') #change the ticks of the axes from external to internal
         ax.set_xlabel('RA') #set the x-axis label
         ax.set_ylabel('DEC') #set the y-axis label
         if k not in np.arange(0,nrows*ncols,ncols): #if not plotting the first column
@@ -674,7 +696,7 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
             if k in np.arange(0,nrows*ncols,nrows): #in the first column
                 ax=__plot_kpcline(pixelres,asectokpc,xlim,leftmargin,topmargin) #draw the 10-kpc line
             
-    fig.subplots_adjust(top=0.95,wspace=0.0,hspace=0.0) #fix the position of the subplots in the figure
+    fig.subplots_adjust(wspace=0.0,hspace=0.0) #fix the position of the subplots in the figure
     if save: #if the save switch is true
         fig.savefig(outname,dpi=300,bbox_inches='tight') #save the figure
 
@@ -682,70 +704,69 @@ def chanmap(datacube='',from_chan=0,to_chan=None,chansep=1,chanmask=False,chanma
         plt.show() #show the figure
     else:
         plt.close()
-    #fig.clf() #clear the figure from the memory
     
 #############################################################################################
 def cubedo(cubedo='',operation=None,chanmin=0,chanmax=None,inbox=None,addchan=None,value='blank',withmask=False,cubedomask=None,cliplevel=0.5,xrot=None,yrot=None,zrot=None,write_fits=False,cubedooutdir='',cubedooutname='',**kwargs):
-    """Perform the selected operation between blank, clip, crop, cut, extend, mirror, mom0, shuffle, toint on a fits data cube.
+    """Perform various operations on a FITS data cube, such as blanking, clipping, cropping, cutting, extending, mirroring, calculating moment 0 map, shuffling, and converting to an integer cube.
 
     Args:
-        cubedo (string): name or path+name of the fits data cube
-        operation (string): operation to perform. Accepted values:
-            blank, blank all the data in the chanmin-chanmax range
-            clip, blank all the data below the cliplevel value
-            crop, crop the data cube to remove the blanked edges
-            cut, extract the subcube from chanmin to chanmax
-            extend, add channels to the spectral axis
-            mirror, mirror the data around a rotation point (x,y,z)
-            mom0, compute the moment 0 map from chanmin to chanmax
-            shuffle, align the spectral profile with the galaxy rotation
-            toint, convert the data cube into an integer cube
-        chanmin (int): first channel for operations blank, cut, mom0
-        chanmax (int): last channel for operations blank, cut, mom0
-        inbox (array-like): spatial cut box as [xmin,xmax,ymin,ymax]
-        addchan (int): number of channels to add in operation extend. If < 0 the channels are added at the beginning of the spectral axis, else at the end
-        value (float/string): value to give to the blanked pixel in operation blank. If string 'blank' it will be np.nan
-        withmask (bool): option to use a detection mask (True) or not (False) for clip and mom0. If it is True, a 2D mask for clip or 3D mask for mom0 must be provided using the cubedomask  argument or the 'mask2d' and 'maskcube' kwarg (see kwargs arguments below)
-        cubedomask (string): name or path+name of the fits 2D or 3D mask. Used if withmask=True
-        cliplevel (float): clip threshold as % of the peak (0.5 is 50%) for clip
-        xrot (float): x-coordinate of the rotational center for operation mirror in pixel
-        yrot (float): y-coordinate of the rotational center for operation mirror in pixel
-        zrot (int): z-coordinate of the rotational center for operation mirror in channels
-        write_fits (boolean): store the output in a fits file (True) or return a variable (False)
-        cubedooutdir (string): output folder name
-        cubedooutname (string): output file name
+        cubedo (str): The name or path+name of the FITS data cube.
+        operation (str): The operation to perform. Accepted values are:
+            - 'blank': Blanks all the data in the chanmin-chanmax range.
+            - 'clip': Blanks all the data below the cliplevel value.
+            - 'crop': Crops the data cube to remove the blanked edges.
+            - 'cut': Extracts the subcube from chanmin to chanmax.
+            - 'extend': Adds channels to the spectral axis.
+            - 'mirror': Mirrors the data around a rotation point (x, y, z).
+            - 'mom0': Computes the moment 0 map from chanmin to chanmax.
+            - 'shuffle': Aligns the spectral profile with the galaxy rotation.
+            - 'toint': Converts the data cube into an integer cube.
+        chanmin (int): The first channel for operations blank, cut, and mom0.
+        chanmax (int): The last channel for operations blank, cut, and mom0.
+        inbox (array-like): The spatial cut box as [xmin, xmax, ymin, ymax].
+        addchan (int): The number of channels to add in the operation extend. If < 0, the channels are added at the beginning of the spectral axis; otherwise, they are added at the end.
+        value (float/string): The value to give to the blanked pixel in the operation blank. If the string 'blank' is used, it will be np.nan.
+        withmask (bool): Specifies whether to use a detection mask (True) or not (False) for clip and mom0. If True, a 2D mask for clip or a 3D mask for mom0 must be provided using the cubedomask argument or the 'mask2d' and 'maskcube' kwargs (see kwargs arguments below).
+        cubedomask (str): The name or path+name of the FITS 2D or 3D mask. Used if withmask=True.
+        cliplevel (float): The clip threshold as a percentage of the peak (0.5 is 50%) for clip.
+        xrot (float): The x-coordinate of the rotational center for the operation mirror in pixels.
+        yrot (float): The y-coordinate of the rotational center for the operation mirror in pixels.
+        zrot (int): The z-coordinate of the rotational center for the operation mirror in channels.
+        write_fits (bool): Specifies whether to store the output in a FITS file (True) or return a variable (False).
+        cubedooutdir (str): The output folder name.
+        cubedooutname (str): The output file name.
         
     Kwargs:
-        datacube (string/ndarray): name or path+name of the fits data cube if cubedo is not given
-        path (string): path to the data cube if the datacube is a name and not a path+name
-        vfield (string): name or path+name of the fits velocity field to be used for operation shuffle
-        specunits (string): string with the spectral units for operation mom0 and shuffle (Default: m/s). Accepted values:
-            - km/s
-            - m/s
-            - Hz
-        spectralres (float): cube spectral resolution in specunits for operation mom0 and shuffle (Default: None)
-        v0 (float): starting velocity to create the spectral axis for operation mom0 and shuffle (Default: None)
-        mask2d (string): name or path+name of the fits 2D mask for operation clip. Used if withmask=True
-        maskcube (string/ndarray): name or path+name of the fits 3D mask cube for operation mom0. Used if withmask=True
-        verbose (bool): option to print messages to terminal if True (Default: False)
- 
+        datacube (str/ndarray): The name or path+name of the FITS data cube if cubedo is not given.
+        path (str): The path to the data cube if the datacube is a name and not a path+name.
+        vfield (str): The name or path+name of the FITS velocity field to be used for the operation shuffle.
+        specunits (str): The string with the spectral units for the operation mom0 and shuffle (Default: m/s). Accepted values are:
+            - 'km/s'
+            - 'm/s'
+            - 'Hz'
+        spectralres (float): The cube spectral resolution in specunits for the operation mom0 and shuffle (Default: None).
+        v0 (float): The starting velocity to create the spectral axis for the operation mom0 and shuffle (Default: None).
+        mask2d (str): The name or path+name of the FITS 2D mask for the operation clip. Used if withmask=True.
+        maskcube (str/ndarray): The name or path+name of the FITS 3D mask cube for the operation mom0. Used if withmask=True.
+        verbose (bool): Specifies whether to print messages to the terminal if True (Default: False).
+    
     Returns:
-        Resulting cube or moment map as fits file
+        Resulting cube or moment map as a FITS file.
         
     Raises:
-        ValueError: If no data cube is provided
-        ValueError: If no path is provided
-        ValueError: If no operation is set
-        ValueError: If operation set do not match accepted values
-        ValueError: If no velocity field is given when 'shuffle' is set
-        ValueError: If no spectral resolution is provided when 'mom0' or 'shuffle' is set
-        ValueError: If no mask is provided when usemask is True
-        ValueError: If no spectral information is available through the input arguments or the cube header
-        ValueError: If mask cube and data cube dimensions do not match
-        ValueError: If size of spatial box is not 4
+        ValueError: If no data cube is provided.
+        ValueError: If no path is provided.
+        ValueError: If no operation is set.
+        ValueError: If the operation set does not match the accepted values.
+        ValueError: If no velocity field is given when 'shuffle' is set.
+        ValueError: If no spectral resolution is provided when 'mom0' or 'shuffle' is set.
+        ValueError: If no mask is provided when usemask is True.
+        ValueError: If no spectral information is available through the input arguments or the cube header.
+        ValueError: If the mask cube and data cube dimensions do not match.
+        ValueError: If the size of the spatial box is not 4.
     """
     #CHECK THE INPUT#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
+    verbose=kwargs.get('verbose',False)
     if type(cubedo)==str or cubedo is None: #if the datacube is a string
         datacube=__read_string(cubedo,'datacube',**kwargs) #store the path to the data cube
     else:
@@ -755,7 +776,7 @@ def cubedo(cubedo='',operation=None,chanmin=0,chanmax=None,inbox=None,addchan=No
     if operation not in ['blank','clip','crop','cut','extend','mirror','mom0','shuffle','toint']: #if wrong operation is given
         raise ValueError("ERROR: wrong operation. Accepted values: ['blank','clip','crop','cut','extend','mirror','mom0','shuffle','toint']. Aborting")
     if operation in ['shuffle']: #if the datacube must be shuffled
-        vfield=kwargs['vfield'] if 'vfield' in kwargs else None
+        vfield=kwargs.get('vfield',None)
         if vfield is None: #if no vfield is provided
             raise ValueError("Selected operation is 'shuffle', but no velocity field is provided. Aborting.")
         if type(vfield)==str: #if the velocity field is a string
@@ -773,8 +794,8 @@ def cubedo(cubedo='',operation=None,chanmin=0,chanmax=None,inbox=None,addchan=No
         y0=yrot #store the y-axis rotation central pixel
         z0=zrot #store the z-axis rotation central channel
     if operation in ['mom0']:  #if the datacube must be clipped
-        specunits=kwargs['specunits'] if 'specunits' in kwargs else None #store the spectral units from the input paramaters
-        spectralres=kwargs['spectralres'] if 'spectralres' in kwargs else None #store the spectral resolution from the input paramaters
+        specunits=kwargs.get('specunits',None) #store the spectral units from the input paramaters
+        spectralres=kwargs.get('spectralres',None) #store the spectral resolution from the input paramaters
         usemask=withmask #store the use mask switch from the input parameters
         if usemask: #if a 2D mask is used
             if type(cubedomask)==str or cubedomask is None: #if the 3D mask is a string
@@ -782,12 +803,12 @@ def cubedo(cubedo='',operation=None,chanmin=0,chanmax=None,inbox=None,addchan=No
             else:
                 maskcube=cubedomask
     if operation in ['shuffle']: #if the datacube must be shuffled
-        spectralres=kwargs['spectralres'] if 'spectralres' in kwargs else None #store the spectral resolution from the input paramaters
-        v0=kwargs['v0'] if 'v0' in kwargs else None #store the starting velocity from the input paramaters
+        spectralres=kwargs.get('spectralres',None) #store the spectral resolution from the input paramaters
+        v0=kwargs.get('v0',None) #store the starting velocity from the input paramaters
     if write_fits: #if the data must be written into a fits file
         outdir=cubedooutdir #store the output folder from the input parameters
         if outdir == '' or outdir is None:  #if the outdir is empty
-            outdir=kwargs['path'] if 'path' in kwargs else os.getcwd()+'/' #the outdir is the input folder
+            outdir=kwargs.get('path',os.getcwd()+'/') #the outdir is the input folder
         elif not os.path.exists(outdir): #if the output folder does not exist
             os.makedirs(outdir) #create the folder  
         outname=cubedooutname #store the outputname from the input parameters
@@ -962,16 +983,17 @@ def cubedo(cubedo='',operation=None,chanmin=0,chanmax=None,inbox=None,addchan=No
         x=np.where(~np.isnan(mom1))[0] #store the non-NaN x coordinates
         y=np.where(~np.isnan(mom1))[1] #store the non-NaN y coordinates
         for i in tqdm(zip(x,y),desc='Spectra shuffled',total=len(x)): #run over the pixels
-            loc=np.argmin(abs(v-mom1[i[0],i[1]])) #define the spectral channel center of shuffle
-            for z in range(nchan): #run over the spectral axis
-                n=(loc-cen+z) % nchan #define the number of channels to be shuffled
-            #    #!!!! SE VUOI CHE WRAPPING SIA OPZIONALE, QUI SOTTO GLI STEP SE wrap=False !!!!#
-            #    #n=(loc-cen+z)
-            #    #if (n < 0) or (n >= nchan): #if negative or grater than the number of channels
-            #    #    pass #do nothing
-            #    #else:
-                shuffle_data[z,i[0],i[1]]=data[n,i[0],i[1]] #perform the shuffle wrapping the noise around   
-            #shuffle_data[:,i[0],i[1]]=np.roll(data[:,i[0],i[1]],loc-cen,axis=0)      
+            if not np.all(np.isnan(data[:,i[0],i[1]])): #if the spectrum is not nan
+                loc=np.argmin(abs(v-mom1[i[0],i[1]])) #define the spectral channel center of shuffle
+                for z in range(nchan): #run over the spectral axis
+                    n=(loc-cen+z) % nchan #define the number of channels to be shuffled
+                #    #!!!! SE VUOI CHE WRAPPING SIA OPZIONALE, QUI SOTTO GLI STEP SE wrap=False !!!!#
+                #    #n=(loc-cen+z)
+                #    #if (n < 0) or (n >= nchan): #if negative or grater than the number of channels
+                #    #    pass #do nothing
+                #    #else:
+                    shuffle_data[z,i[0],i[1]]=data[n,i[0],i[1]] #perform the shuffle wrapping the noise around   
+                #shuffle_data[:,i[0],i[1]]=np.roll(data[:,i[0],i[1]],loc-cen,axis=0)      
         data=shuffle_data.copy() #store the shuffle data
         
     #------------   TOINT     ------------#     
@@ -994,59 +1016,59 @@ def cubedo(cubedo='',operation=None,chanmin=0,chanmax=None,inbox=None,addchan=No
                         
 #############################################################################################
 def cubestat(datacube='',cs_statistics='mad',**kwargs):
-    """Calculate the detection limit of a data cube and (optional) its rms, spectral resolution, beam major axis, beam minor axis, beam position angle and beam area. It also computes the errors on rms and sensitivity.
+    """Calculate the detection limit of a data cube and optionally its root mean square (rms), spectral resolution, beam major axis, beam minor axis, beam position angle, and beam area. It also computes the errors on rms and sensitivity.
 
     Args:
-        datacube (string/ndarray): string with name or path+name of the fits data cube
+        datacube (str or ndarray): The name or path+name of the FITS data cube.
+        cs_statistics (str): The statistic to be used in the noise measurement. Possible values are 'std' for standard deviation and 'mad' for median absolute deviation. Standard deviation is faster but less robust against emission and artifacts. Median absolute deviation is more robust in the presence of strong, extended emission or artifacts.
 
     Kwargs:
-        path (string): path to the data cube if the datacube is a name and not a path+name
-        cs_statistics (string): statistic to be used in the noise measurement. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts.
-        pixunits (string): string with the spatial units (Default: None). Accepted values:
+        path (str): The path to the data cube if 'datacube' is a name and not a path+name.
+        pixunits (str): String with the spatial units (Default: None). Accepted values:
             - None (it will try to retrieve them from the cube header)
             - deg
-            - armin
+            - arcmin
             - arcsec
-        specunits (string): string with the spectral units (Default: None). Accepted values:
+        specunits (str): String with the spectral units (Default: None). Accepted values:
             - None (it will try to retrieve them from the cube header)
             - km/s
             - m/s
             - Hz
-        fluxunits (string): string with the flux units (Default: None)
-        pixelres (float): cube spatial resolution in pixunits (Default: None)
-        spectralres (float): cube spectral resolution in specunits (Default: None)
-        bmaj (float): beam major axis in arcsec in pixunits (Default: None)
-        bmin (float): beam minor axis in arcsec in pixunits (Default: None)
-        bpa (float): beam position angle in degree (Default: None)
-        rms (float): rms of the data cube as a float in fluxunits (Default: None)
-        nsigma (float): sigma of the detectin limit in terms of nsigma*rms (Default: 3)
-        verbose (bool): option to print messages to terminal if True (Default: False)
+        fluxunits (str): The flux units. 
+        pixelres (float): The cube spatial resolution in 'pixunits'. Default is None.
+        spectralres (float): The cube spectral resolution in 'specunits'. Default is None.
+        bmaj (float): The beam major axis in arcsec in 'pixunits'. Default is None.
+        bmin (float): The beam minor axis in arcsec in 'pixunits'. Default is None.
+        bpa (float): The beam position angle in degrees. Default is None.
+        rms (float): The root mean square (rms) of the data cube in 'fluxunits'. Default is None.
+        nsigma (float): The sigma of the detection limit in terms of nsigma*rms. Default is 3.
+        verbose (bool): If True, messages will be printed to the terminal. Default is False.
 
     Returns:
-        Python dictionary with the cube statistics
-    
+        dict: A Python dictionary with the cube statistics.
+
     Raises:
-        ValueError: If no data cube is provided
-        ValueError: If no path is provided
+        ValueError: If no data cube is provided.
+        ValueError: If no path is provided.
     """
     #CHECK THE INPUT#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
+    verbose=kwargs.get('verbose',False)
     datacube=__read_string(datacube,'datacube',**kwargs) #store the path to the data cube
     #CHECK THE KWARGS#
-    pixunits=kwargs['pixunits'] if 'pixunits' in kwargs else None
+    pixunits=kwargs.get('pixunits',None)
     if pixunits not in [None,'deg','arcmin','arcsec']: #if wrong spatial units are given
         raise ValueError('ERROR: Please provide the spatial units in deg, arcmin or arcsec. Aborting!')
-    specunits=kwargs['specunits'] if 'specunits' in kwargs else None
+    specunits=kwargs.get('specunits',None)
     if specunits not in [None,'km/s','m/s','Hz']: #if wrong spatial units are given
         raise ValueError('ERROR: Please provide the spectral units km/s, m/s or Hz. Aborting!')   
-    fluxunits=kwargs['fluxunits'] if 'fluxunits' in kwargs else None
-    pixelres=kwargs['pixelres'] if 'pixelres' in kwargs else None
-    spectralres=kwargs['spectralres'] if 'spectralres' in kwargs else None
-    bmaj=kwargs['bmaj'] if 'bmaj' in kwargs else None
-    bmin=kwargs['bmin'] if 'bmin' in kwargs else None
-    bpa=kwargs['bpa'] if 'bpa' in kwargs else None
-    rms=kwargs['rms'] if 'rms' in kwargs else None
-    nsigma=kwargs['nsigma'] if 'nsigma' in kwargs else 3
+    fluxunits=kwargs.get('fluxunits',None)
+    pixelres=kwargs.get('pixelres',None)
+    spectralres=kwargs.get('spectralres',None)
+    bmaj=kwargs.get('bmaj',None)
+    bmin=kwargs.get('bmin',None)
+    bpa=kwargs.get('bpa',None)
+    rms=kwargs.get('rms',None)
+    nsigma=kwargs.get('nsigma',3)
 
     #---------------   START THE FUNCTION   ---------------#
     data,header=__load(datacube) #open the data cube
@@ -1108,9 +1130,10 @@ def cubestat(datacube='',cs_statistics='mad',**kwargs):
     if rms is None: #if the rms is not given
         rms=[] #initialize the rms list
         for i in np.arange(data.shape[0]): #run thorugh the spectral axis
-            rms.append(__get_rms(data[i,:,:],cs_statistics)) #for each slice in the channels range calculate the rms and
+            rms.append(__get_rms(data[i,:,:],cs_statistics)) #for each channel map calculate the rms
         rms=np.median(rms) #calculate the median of the rms values
     rms_error=rms/10 #the error on the rms is equal to the calibration error (typically of 10%)
+            
     #WE CALCULATE THE DETECTION LIMIT AND RMS ERROR#
     if bmaj is not None and bmin is not None: #if the beam axes are available
         beamarea=1.13*(bmin*bmaj) #calculate the beam area
@@ -1120,7 +1143,7 @@ def cubestat(datacube='',cs_statistics='mad',**kwargs):
         warnings.warn('Unable to calculate the beam area. Cannot compute the sensitivity')
         sensitivity=None
         sens_error=None
-    
+                
     #WE STORE THE RESULT IN A DICTIONARY#
     result={} #initialize the dictionary result
     result['CUBE UNITS']='--- CUBE UNITS ---'
@@ -1153,29 +1176,29 @@ def cubestat(datacube='',cs_statistics='mad',**kwargs):
 
 #############################################################################################
 def fitsarith(path='',fits1='',fits2='',fitsoperation=None,fitsarithoutdir='',fitsarithoutname='',**kwargs):
-    """Perform a number of arithmetical operations (sum, sub, mul, div) between two fits file.
-
+    """Perform arithmetic operations (sum, subtraction, multiplication, division) between two FITS files.
+    
     Args:
-        path (string): path to the fits file
-        fits1 (string): name or path+name of one fits file
-        fits2 (string): name or path+name of the other fits file
-        fitsoperation (string): operation to perform between:
-            sum, sum the two fits file
-            sub, subtract the two fits file
-            mul, multiply the two fits file
-            div, divide the two fits file (the zeroes in the second fits will be blanked)
-        fitsarithoutdir (string): output folder name
-        fitsarithoutname (string): output file name
-
+        path (str): Path to the FITS files.
+        fits1 (str): Name or path+name of the first FITS file.
+        fits2 (str): Name or path+name of the second FITS file.
+        fitsoperation (str): Operation to perform:
+            - 'sum': Sum the two FITS files.
+            - 'sub': Subtract the second FITS file from the first FITS file.
+            - 'mul': Multiply the two FITS files.
+            - 'div': Divide the first FITS file by the second FITS file (zeros in the second FITS file will be blanked).
+        fitsarithoutdir (str): Output folder name.
+        fitsarithoutname (str): Output file name.
+    
     Returns:
-        Result of the operation as fits file
+        str: Path to the resulting FITS file.
     
     Raises:
-        ValueError: If one or both fits file are not set
-        ValueError: If no operation is set
-        ValueError: If operation set do not match accepted values
-        ValueError: If no output name is given
-        ValueError: If the shapes of the two fits are not matching
+        ValueError: If one or both FITS files are not provided.
+        ValueError: If no operation is specified.
+        ValueError: If the specified operation is not supported.
+        ValueError: If no output name is given.
+        ValueError: If the shapes of the two FITS files do not match.
     """
     #CHECK THE INPUT#
     if path == '' or path is None: #if the path to the fits files is not given
@@ -1229,35 +1252,35 @@ def fitsarith(path='',fits1='',fits2='',fitsoperation=None,fitsarithoutdir='',fi
         
 #############################################################################################
 def fixmask(refcube='',masktofix='',fixmaskoutdir='',fixmaskoutname='',**kwargs):
-    """Fix a 3D detection mask by setting to 0 the voxel corresponding to negative detections (using a reference data cube). It is assumed that a value > 0 in the mask is marking a detection.
+    """Fix a 3D detection mask by setting the voxels corresponding to negative detections to 0, based on a reference data cube. It is assumed that a value > 0 in the mask indicates a detection.
     
     Args:
-        refcube (string/ndarray): name or path+name of the fits data cube used to fix the mask
-        masktofix (string): name or path+name of the fits 3D mask to be fixed
-        fixmaskoutdir (string): output folder name
-        fixmaskoutname (string): output file name
-        
+        refcube (str/ndarray): Name or path+name of the FITS data cube used as the reference for fixing the mask.
+        masktofix (str): Name or path+name of the FITS 3D mask to be fixed.
+        fixmaskoutdir (str): Output folder name for the fixed mask.
+        fixmaskoutname (str): Output file name for the fixed mask.
+    
     Kwargs:
-        datacube (string/ndarray): name or path+name of the fits data cube if refcube is not given
-        maskcube (string/ndarray): name or path+name of the fits 3D mask cube. Used if chanmask=True                          
-        path (string): path to the data cube if the datacube is a name and not a path+name
-        verbose (bool): option to print messages to terminal if True (Default: False)
-
+        datacube (str/ndarray): Name or path+name of the FITS data cube, used if refcube is not provided.
+        maskcube (str/ndarray): Name or path+name of the FITS 3D mask cube, used when chanmask=True.
+        path (str): Path to the data cube if datacube is specified as a name and not a path+name.
+        verbose (bool): Option to print messages to the terminal if set to True. (Default: False)
+    
     Returns:
-        Fixed 3D mask cube as fits file
-        
+        The fixed mask as a FITS file.
+    
     Raises:
-        ValueError: If no data cube is provided
-        ValueError: If no path is provided
-        ValueError: If no mask cube is provided
+        ValueError: If no data cube is provided.
+        ValueError: If no path is provided.
+        ValueError: If no mask cube is provided.
     """
     #CHECK THE INPUT#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
+    verbose=kwargs.get('verbose',False)
     datacube=__read_string(refcube,'datacube',**kwargs) #store the path to the data cube
     maskcube=__read_string(masktofix,'maskcube',**kwargs) #store the path to the mask cube
     outdir=fixmaskoutdir #store the output folder from the input parameters
     if outdir == '' or outdir is None:  #if the outdir is empty
-        outdir=kwargs['path'] if 'path' in kwargs else os.getcwd()+'/' #the outdir is the input folder
+        outdir=kwargs.get('path',os.getcwd()+'/') #the outdir is the input folder
     elif not os.path.exists(outdir): #if the output folder does not exist
         os.makedirs(outdir) #create the folder
     outname=fixmaskoutname #store the outputname from the input parameters
@@ -1280,44 +1303,44 @@ def fixmask(refcube='',masktofix='',fixmaskoutdir='',fixmaskoutname='',**kwargs)
 #############################################################################################
 def gaussfit(cubetofit='',gaussmask='',linefwhm=15,amp_thresh=0,p_reject=1,
              clipping=False,threshold=0.5,errors=False,write_field=False,write_fits=False,gaussoutdir='',gaussoutname='',**kwargs):
-    """Perform a gaussian fit on a spectral cube. Each spaxel will be fitted with a single gaussian.
-
+    """Perform a Gaussian fit on a spectral cube. This function fits a single Gaussian profile to each spaxel (spatial pixel) in the spectral cube.
+    
     Args:
-        cubetofit (string):name or path+name of the fits data cube to be fitted
-        gaussmask (string): name or path+name of the fits 2D mask to be used in the fit
-        linefwhm (float): first guess on the fwhm of the line profile in km/s
-        amp_thresh (float): amplitude threshold for the fit. If a profile peak is < threshold, the fit wont be performed on that spectrum
-        p-reject (float): p-value threshold for fit rejection. If a best-fit has p > p-reject, it will be rejected
-        clipping (bool): clip the spectrum to a % of the profile peak if True
-        threshold (float): clip threshold as % of the peak (0.5 is 50%). Used if clipping is True
-        errors (bool): compute the errors on the best-fit if True
-        write_field (bool): compute the velocity field if True
-        write_fits (boolean): store the output in a fits file (True) or return a variable (False)
-        gaussoutdir (string): output folder name
-        gaussoutname (string): output file name
+        cubetofit (str): Name or path+name of the FITS data cube to be fitted.
+        gaussmask (str): Name or path+name of the FITS 2D mask to be used in the fit.
+        linefwhm (float): Initial guess for the full width at half maximum (FWHM) of the line profile in km/s.
+        amp_thresh (float): Amplitude threshold for the fit. If a profile peak is below the threshold, the fit will not be performed on that spectrum.
+        p_reject (float): p-value threshold for fit rejection. If a best-fit has p-value greater than p_reject, it will be rejected.
+        clipping (bool): If True, clip the spectrum to a percentage of the profile peak.
+        threshold (float): Clip threshold as a percentage of the peak (0.5 represents 50%). This parameter is used only if clipping is True.
+        errors (bool): If True, compute the errors on the best-fit.
+        write_field (bool): If True, compute the velocity field.
+        write_fits (bool): If True, store the output in a FITS file; if False, return a variable.
+        gaussoutdir (str): Output folder name.
+        gaussoutname (str): Output file name.
     
     Kwargs:
-        datacube (string/ndarray): name or path+name of the fits data cube if cubetofit is not given
-        mask2d (string): name or path+name of the fits 2D mask if gaussmask is not given
-        path (string): path to the data cube if the datacube is a name and not a path+name
-        specunits (string): string with the spectral units for operation mom0 and shuffle (Default: m/s). Accepted values:
-            - km/s
-            - m/s
-            - Hz
-        spectralres (float): data spectral resolution in specunits. Will be taken from cube header if not provided.
-        verbose (bool): option to print messages to terminal if True (Default: False)
- 
+        datacube (str/ndarray): Name or path+name of the FITS data cube if cubetofit is not given.
+        mask2d (str): Name or path+name of the FITS 2D mask if gaussmask is not given.
+        path (str): Path to the data cube if the datacube is a name and not a path+name.
+        specunits (str): String specifying the spectral units for operations mom0 and shuffle. Default: "m/s". Accepted values:
+            - 'km/s'
+            - 'm/s'
+            - 'Hz'
+        spectralres (float): Data spectral resolution in specunits. This value will be taken from the cube header if not provided.
+        verbose (bool): If True, print messages to the terminal. Default: False.
+    
     Returns:
-        Best-fit model cube as fits file
-        
+        Best-fit model cube as a FITS file.
+    
     Raises:
-        ValueError: If no data cube is provided
-        ValueError: If no path is provided
-        ValueError: If mask cube and data cube dimensiosns do not match
-        ValueError: If no spectral information is available through the input arguments or the cube header
+        ValueError: If no data cube is provided.
+        ValueError: If no path is provided.
+        ValueError: If the mask cube and data cube dimensions do not match.
+        ValueError: If no spectral information is available through the input arguments or the cube header.
     """
     #CHECK THE INPUT#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
+    verbose=kwargs.get('verbose',False)
     if type(cubetofit)==str or cubetofit is None: #if the datacube is a string
         print(cubetofit)
         datacube=__read_string(cubetofit,'datacube',**kwargs) #store the path to the data cube
@@ -1329,7 +1352,7 @@ def gaussfit(cubetofit='',gaussmask='',linefwhm=15,amp_thresh=0,p_reject=1,
         maskcube=gaussmask
     outdir=gaussoutdir #store the output folder from the input parameters
     if outdir == '' or outdir is None:  #if the outdir is empty
-        outdir=kwargs['path'] if 'path' in kwargs else os.getcwd()+'/' #the outdir is the input folder
+        outdir=kwargs.get('path',os.getcwd()+'/') #the outdir is the input folder
     elif not os.path.exists(outdir): #if the output folder does not exist
         os.makedirs(outdir) #create the folder    
     outname=gaussoutname #store the output name from the input parameters
@@ -1337,8 +1360,8 @@ def gaussfit(cubetofit='',gaussmask='',linefwhm=15,amp_thresh=0,p_reject=1,
         outname=datacube.replace('.fits','_gaussfit.fits')  #the outname is the object name plus chanmap.pdf
     elif outname[0] != '.': #if the outname name start with a . means that it is a path to the cube (so differs from path parameter)
         outname=outdir+outname
-    specunits=kwargs['specunits'] if 'specunits' in kwargs else 'm/s' #store the spectral units from the input paramaters
-    spectralres=kwargs['spectralres'] if 'spectralres' in kwargs else None #store the spectral resolution from the input paramaters
+    specunits=kwargs.get('specunits','m/s') #store the spectral units from the input paramaters
+    spectralres=kwargs.get('spectralres',None) #store the spectral resolution from the input paramaters
     
     #---------------   START THE FUNCTION   ---------------#
     data,header=__load(datacube) #open the data cube
@@ -1430,82 +1453,80 @@ def gaussfit(cubetofit='',gaussmask='',linefwhm=15,amp_thresh=0,p_reject=1,
                     if write_field: #if the velocity field whould be computed
                         field[i[0],i[1]]=total_fit.mean.value #store the best-fit peak value
     
-    dtype='float32' #data type is float32
-    
     if write_field: #if the velocity field whould be computed
         wcs=WCS(header).dropaxis(2) #store the wcs
         h=wcs.to_header() #convert the wcs into a header
         h['BUNIT']=(specunits,'Best-fit peak velocities') #add the BUNIT keyword
         if specunits == 'm/s': #if the spectral units are m/s
             field=field*1000 #reconvert the velocoty into m/s
-        hdu=fits.PrimaryHDU(field.astype(dtype),header=h) #create the primary HDU
+        hdu=fits.PrimaryHDU(field.astype('float32'),header=h) #create the primary HDU
         vfield=fits.HDUList([hdu]) #make the HDU list
         vfield.writeto(outname.replace('.fits','_vel.fits'),overwrite=True) #save the velocity field
           
     if write_fits: #if the data must be write into a fits file
-        hdu=fits.PrimaryHDU(model_cube.astype(dtype),header=header) #create the primary HDU
+        hdu=fits.PrimaryHDU(model_cube.astype('float32'),header=header) #create the primary HDU
         new_data=fits.HDUList([hdu]) #make the HDU list
         new_data.writeto(outname,overwrite=True) #write the data into a fits file
     else:
-        return model_cube.astype(dtype)
+        return model_cube.astype('float32')
             
 #############################################################################################
 def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=None,pv_statistics='mad',pvoutdir='',
           write_fits=False,fitsoutname='',plot=False,saveplot=False,plotoutname='',**kwargs):
-    """Extract the position-velocity slice of a given data cube along a path defined by the given points, angle and width. It also (optionally) plots the slice and (optionally) save it to a fits file.
-
-    Args:
-        pvcube (string/ndarray): name or path+name of the fits data cube
-        pvwidth (float): width of the slice in arcsec. If not given, will be thebeam size
-        pvpoints (array-like): ICRS RA-DEC comma-separated coordinate of the slice points in decimal degree. If two are given ([x,y]), it is assumed they are the center of the slice. Else, they need to be the starting and ending coordinates ([xmin,xmax,ymin,ymax])
-        pvangle (float): position angle of the slice in degree when two points are given. If not given, will be the object position angle
-        pvchmin (int): first channel of the slice
-        pvchmax (int): last channel of the slice
-        pv_statistics (string): statistic to be used in the noise measurement. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts.
-        pvoutdir (string): string of the output folder name
-        write_fits (bool): save the slice as fits file if True
-        fitsoutname (string): string of the output fits file name
-        plot (bool): plot the slice if True
-        saveplot (string): save the plot if True
-        plotoutname (string): string of the output plot file name
+    """Extract a position-velocity slice from a given data cube along a path defined by specified points, angle, and width. Optionally, it can plot the slice and save it to a FITS file.
     
+    Args:
+        pvcube (str/ndarray): Name or path+name of the FITS data cube.
+        pvwidth (float): Width of the slice in arcseconds. If not provided, it will be set to the beam size.
+        pvpoints (array-like): ICRS RA-DEC comma-separated coordinates of the slice points in decimal degrees. If only two points are given ([x, y]), they are assumed to be the center of the slice. Otherwise, the points need to be the starting and ending coordinates ([xmin, xmax, ymin, ymax]).
+        pvangle (float): Position angle of the slice in degrees when two points are given. If not provided, it will use the object position angle.
+        pvchmin (int): First channel of the slice.
+        pvchmax (int): Last channel of the slice.
+        pv_statistics (str): Statistic to be used in the noise measurement. Possible values are 'std' for standard deviation or 'mad' for median absolute deviation. The standard deviation algorithm is faster but less robust against emission and artifacts in the data. The median absolute deviation algorithm is more robust in the presence of strong, extended emission or artifacts.
+        pvoutdir (str): Output folder name as a string.
+        write_fits (bool): Saves the slice as a FITS file if True.
+        fitsoutname (str): Output FITS file name as a string.
+        plot (bool): Plots the slice if True.
+        saveplot (bool): Saves the plot if True.
+        plotoutname (str): Output plot file name as a string.
+        
     Kwargs:
-        datacube (string/ndarray): name or path+name of the fits data cube if pvcube is not given
-        path (string): path to the data cube if the datacube is a name and not a path+name
-        pixunits (string): string with the spatial units (Default: None). Accepted values:
+        datacube (str/ndarray): Name or path+name of the FITS data cube if pvcube is not provided.
+        path (str): Path to the data cube if the datacube is a name and not a path+name.
+        pixunits (str): String with the spatial units (Default: None). Accepted values:
             - None (it will try to retrieve them from the cube header)
             - deg
-            - armin
+            - arcmin
             - arcsec
-        pixelres (float): cube spatial resolution in pixunits (Default: None)
-        bmaj (float): beam major axis in arcsec
-        pa (float): object position angle in degree
-        pvsig (float): lowest contour level in terms of pvsig*rms
-        figure (bool): create a plot figure if True
-        position (int): position of the subplot in the figure as triplet of integers (111 = nrow 1, ncol 1, index 1)
-        vsys (float): object systemic velocity in m/s
-        rms (float): rms of the data cube in Jy/beam as a float. If not given (None), the function tries to calculate it
-        asectokpc (float): arcsec to kpc conversion to plot the spatial scale
-        objname (string): name of the object
-        subtitle (string): subtitle of the pv plot
-        lim (array-like): list or array of plot x and y limits as [xmin,xmax,ymin,ymax]. They will replace the default limits
-        pv_ctr (array-like): contour levels in units of rms. They will replace the default levels                                    
-        ctr_width (float): line width of the contours
-        verbose (bool): option to print messages and plot to terminal if True   
-
+        pixelres (float): Cube spatial resolution in pixunits (Default: None).
+        bmaj (float): Beam major axis in arcseconds.
+        pa (float): Object position angle in degrees.
+        pvsig (float): Lowest contour level in terms of pvsig*rms.
+        figure (bool): Creates a plot figure if True.
+        position (int): Position of the subplot in the figure as a triplet of integers (e.g., 111 = nrow 1, ncol 1, index 1).
+        vsys (float): Object systemic velocity in m/s.
+        rms (float): RMS of the data cube in Jy/beam as a float. If not provided (None), the function tries to calculate it.
+        asectokpc (float): Arcseconds to kiloparsecs conversion factor to plot the spatial scale.
+        objname (str): Name of the object.
+        subtitle (str): Subtitle of the position-velocity plot.
+        lim (array-like): List or array of plot x and y limits as [xmin, xmax, ymin, ymax]. These values will replace the default limits.
+        pv_ctr (array-like): Contour levels in units of rms. These values will replace the default levels.
+        ctr_width (float): Line width of the contours.
+        verbose (bool): Prints messages and plots to the terminal if True.
+    
     Returns:
-        Pv slice of a cube as fits file or PrimaryHUD object
-        
+        Position-velocity (PV) slice of a cube as a FITS file or PrimaryHDU object.
+    
     Raises:
-        ValueError: If no data cube is provided
-        ValueError: If no path is provided
-        ValueError: If no starting and/or ending points are given
-        ValueError: If number of given points is incorrect
-        ValueError: If points are not given as list or tuple
-        ValueError: If no position angle is provided
+        ValueError: If no data cube is provided.
+        ValueError: If no path is provided.
+        ValueError: If no starting and/or ending points are given.
+        ValueError: If the number of given points is incorrect.
+        ValueError: If the points are not given as a list or tuple.
+        ValueError: If no position angle is provided.
     """
     #CHECK THE INPUT#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
+    verbose=kwargs.get('verbose',False)
     if type(pvcube)==str or pvcube is None: #if the datacube is a string
         datacube=__read_string(pvcube,'datacube',**kwargs) #store the path to the data cube
     else:
@@ -1513,13 +1534,8 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
     if pvwidth is None: #if width is not given
         if verbose:
             warnings.warn('Pv width not set. Trying to set it to the beam major axis!')
-        if 'bmaj' in kwargs: #if the beam major axis is in kwargs
-            if kwargs['bmaj'] == '' or kwargs['bmaj'] is None:
-                warnings.warn('Beam major axis not set. Pv width will be 1 pixel!')
-                pvwidth=1
-            else:
-                pvwidth=kwargs['bmaj'] #store the beam major axis from the input kwargs
-        else:
+        pvwidth=kwargs.get('bmaj',None)
+        if pvwidth is None:
             warnings.warn('Beam major axis not set. Pv width will be 1 pixel!')
             pvwidth=1
     if pvpoints is None: #if no coordinates are given for the center
@@ -1541,19 +1557,15 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
         raise ValueError('ERROR: wrong number of coordinates given {}, required an even number. Aborting!'.format(len(pvpoints)))
     if from_center: #if the slice is defined from its center
         if pvangle is None: #if angle is not given
-            if 'pa' in kwargs: #if the object position angle is in kwargs
-                if kwargs['pa'] == '' or kwargs['pa'] is None:
-                    raise ValueError('ERROR: no position angle is set: aborting!')
-                else:
-                    pvangle=kwargs['pa']
-            else:
+            pvangle=kwargs.get('pa',None)
+            if pvangle is None:
                 raise ValueError('ERROR: no position angle is set: aborting!')
         pvangle=(180+pvangle)*u.degree #convert it due to position angle definition of pvextractor
     chmin=pvchmin #store the lower channel from the input parameters
     chmax=pvchmax #store the upper channel from the input parameters
     outdir=pvoutdir #store the output folder from the input parameters
     if outdir == '' or outdir is None:  #if the outdir is empty
-        outdir=kwargs['path'] if 'path' in kwargs else os.getcwd()+'/' #the outdir is the input folder
+        outdir=kwargs.get('path',os.getcwd()+'/') #the outdir is the input folder
     elif not os.path.exists(outdir): #if the output folder does not exist
         os.makedirs(outdir) #create the folder    
     pvoutname=fitsoutname #store the output name from the input parameters
@@ -1563,21 +1575,19 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
     if plotoutname == '' or plotoutname is None:  #if the outname is empty
         plotoutname=datacube.replace('.fits','_pvslice.pdf') #the outname is the object name plus'_pvslice.fits
     #CHECK THE KWARGS#
-    pvsig=kwargs['pvsig'] if 'pvsig' in kwargs else 3
-    pixunits=kwargs['pixunits'] if 'pixunits' in kwargs else None
-    pixelres=kwargs['pixelres'] if 'pixelres' in kwargs else None
-    figure=kwargs['figure'] if 'figure' in kwargs else False
-    position=kwargs['position'] if 'position' in kwargs else 111
-    rms=kwargs['rms'] if 'rms' in kwargs else None
-    vsys=kwargs['vsys'] if 'vsys' in kwargs else None
-    asectokpc=kwargs['asectokpc'] if 'asectokpc' in kwargs else None
-    objname=kwargs['objname'] if 'objname' in kwargs else None
-    if objname is None: #if in kwargs but not set
-        objname='' #set it to empty
-    subtitle=kwargs['subtitle'] if 'subtitle' in kwargs else None
-    lim=kwargs['lim'] if 'lim' in kwargs else None
-    pv_ctr=kwargs['pv_ctr'] if 'pv_ctr' in kwargs else None
-    ctr_width=kwargs['ctr_width'] if 'ctr_width' in kwargs else 2
+    pvsig=kwargs.get('pvsig',3)
+    pixunits=kwargs.get('pixunits',None)
+    pixelres=kwargs.get('pixelres',None)
+    figure=kwargs.get('figure',False)
+    position=kwargs.get('position',111)
+    rms=kwargs.get('rms',None)
+    vsys=kwargs.get('vsys',None)
+    asectokpc=kwargs.get('asectokpc',None)
+    objname=kwargs.get('objname','')
+    subtitle=kwargs.get('subtitle',None)
+    lim=kwargs.get('lim',None)
+    pv_ctr=kwargs.get('pv_ctr',None)
+    ctr_width=kwargs.get('ctr_width',2)
 
     #---------------   START THE FUNCTION   ---------------#
     data,header=__load(datacube) #open the data cube
@@ -1678,7 +1688,6 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
             nrows=1 #number of rows in the atlas
             ncols=1 #number of columns in the atlas
             fig=plt.figure(figsize=(6*ncols,7*nrows)) #create the figure
-            fig.suptitle('{} p-v plot'.format(objname),fontsize=24) #add the title
             ax=fig.add_subplot(nrows,ncols,1,projection=WCS(pv.header)) #create the subplot
         #PREPARE THE SUBPLOT#
         else:
@@ -1709,7 +1718,6 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
             print('Contours level: {} Jy/beam'.format(ctr*rms))
         #WE DO THE PLOT#
         im=ax.imshow(data,cmap='Greys',norm=norm,aspect='auto') #plot the pv slice
-        ax.tick_params(direction='in') #change the ticks of the axes from external to internal
         ax.set_xlim(xlim) #set the xlim
         ax.set_ylim(ylim) #set the ylim
         if pv.header['CUNIT2']=='m/s': #if the spectral units are m/s
@@ -1736,54 +1744,69 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=0,pvchmax=No
 
         #NOW WE SAVE AND PRINT THE PLOT#
         if figure: #if it is a figure
-            fig.subplots_adjust(left=0.17, bottom=0.1, right=0.93, top=0.85, wspace=0.0, hspace=0.0) #fix the position of the subplots in the figure   
+            fig.subplots_adjust(wspace=0.0,hspace=0.0) #fix the position of the subplots in the figure   
             if saveplot: #if the save switch is true
                 fig.savefig(outdir+plotoutname,dpi=300,bbox_inches='tight') #save the figure
             if verbose: #if print-to-terminal option is true
                 plt.show() #show the figure
             else:
                 plt.close()
-            #fig.clf() #clear the figure from the memory
     else: #if no plot has to be made
         return pv #return the pvslice
         
 #############################################################################################
-def lines_finder(spectrum=None,spectrum_rms=None,smooth_kernel=None,sc_threshold=3,sc_replace=2,sc_fluxrange='negative',sc_statistics='mad',link_kernel=3,rel_snrmin=3,rel_threshold=0,finderoutdir='',finderoutname='',**kwargs):
-    """Stack the spectra extracted from a given number of regions around a center starting from a minimum radius up to a maximum radius. Afterwards, it runs a source-finding algorithm on each stacked spectrum to check for detected lines. It optionally store diagnostic plots of the stacking and the source-finding routines and also optionally stores relevant diagnostic fits file of the source-finding routine.
+def lines_finder(spectrum=None,spectrum_rms=None,smooth_kernel=None,sc_threshold=3,sc_replace=2,sc_fluxrange='negative',sc_statistics='mad',link_kernel=3,separation=3,rel_snrmin=3,rel_threshold=0,keep_negative=True,gaussianity=False,write_catalogue=False,finderoutdir='',finderoutname='',**kwargs):
+    """One-dimensional source finding algorithm for spectral lines detection. It resembles the The Source Finding Application, SoFiA (Serra et al. 2015, Westmeier et al. 2021).
 
     Args:
-        spectrum (array): 1D array with the data
-        spectrum_rms (float): rms of the spectrum
-        smooth_kernel (int/list of int): boxcar kernel size (or list of kernel sizes) to apply. The individual kernel sizes must be odd integer values of 3 or greater and denote the full width of the Boxcar filter used to smooth the spectrum. Set to None or 1 to disable.
-        sc_threshold (float): flux threshold to be used by the source finder relative to the measured rms in each smoothing iteration. Values in the range of about 3 to 5 have proven to be useful in most situations, with lower values in that range requiring use of the reliability filter to reduce the number of false detections.
-        sc_replace (float): before smoothing the spectrum during n source finder iteration, every flux value that was already detected in a previous iteration will be replaced by this value multiplied by the original noise level in the non-smoothed data cube, while keeping the original sign of the data value. This feature can be disabled by specifying a value of < 0.
-        sc_fluxrange (string): flux range to be used in the noise measurement of the source finder. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artefacts from affecting the noise measurement. If set to 'full', all pixels will be used in the noise measurement irrespective of their flux.
-        sc_statistics (string): statistic to be used in the noise measurement process of the source finder. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts.
-        link_kernel (int): minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker.
-        rel_threshold (float): reliability threshold in the range of 0 to 1. Sources with a reliability below this threshold will be discarded.
-        rel_snrmin (float): lower signal-to-noise limit for reliable sources. Detections that fall below this threshold will be classified as unreliable and discarded. The value denotes the integrated signal-to-noise ratio, SNR = Fsum/(RMS√N), of the source, where N is the number of channels of the source, Fsum is the summed flux density and RMS is the local RMS noise level (assumed to be constant). Note that the spectral resolution is assumed to be equal to the channel width.
-        finderoutdir (string): output folder name for the reliability plot
-        finderoutname (string): output file name for the reliability plot
-        
+        spectrum (array-like): An n-dimensional array or list of lists containing the data. Each dimension of the array or nested list represents a single spectrum.
+        spectrum_rms (array-like/float): The root mean square (rms) of the spectra. If a single number is provided, it is assumed to be the same for all input spectra. Otherwise, it must be a 1-dimensional array or list with the same size as the number of input spectra.
+        smooth_kernel (int/list of int): The size of the boxcar smoothing kernel (or a list of kernel sizes) to apply. Each kernel size must be an odd integer value of 3 or greater, representing the full width of the Boxcar filter used to smooth the spectrum. Set to None or 1 to disable smoothing.
+        sc_threshold (float): The flux threshold used by the source finder relative to the measured rms in each smoothing iteration. Recommended values range from about 3 to 5, with lower values requiring the use of the reliability filter to reduce false detections.
+        sc_replace (float): Before smoothing the spectrum during each source finder iteration, any flux value that was already detected in a previous iteration will be replaced by this value multiplied by the original noise level in the non-smoothed data cube. The original sign of the data value is preserved. Specify a value less than 0 to disable this feature.
+        sc_fluxrange (str): The flux range used in the noise measurement of the source finder. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artifacts from affecting the noise measurement. If set to any other value, all pixels will be used in the noise measurement irrespective of their flux.
+        sc_statistics (str): The statistic used in the noise measurement process of the source finder. Possible values are 'std' for standard deviation and 'mad' for median absolute deviation. Standard deviation is faster but less robust in the presence of emission or artifacts. Median absolute deviation is more robust in such cases.
+        link_kernel (int): The minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker.
+        separation (int): The maximum channel separation between two sources to consider them as a single source.
+        rel_threshold (float): The reliability threshold in the range of 0 to 1. Sources with a reliability below this threshold will be discarded.
+        rel_snrmin (float): The lower signal-to-noise limit for reliable sources. Detections below this threshold will be classified as unreliable and discarded. The integrated signal-to-noise ratio (SNR) of a source is calculated as SNR = Fsum / (RMS * sqrt(N)), where Fsum is the summed flux density, RMS is the local RMS noise level (assumed to be constant), and N is the number of channels of the source. The spectral resolution is assumed to be equal to the channel width.
+        keep_negative (bool): If set to False, detections with negative flux will be discarded at the end of the process.
+        gaussianity (bool): If set to True, two statistical tests (Anderson-Darling and Kanekar) will be performed to assess the gaussianity of the noise in the input spectra.
+        write_catalogue (bool): If True, a CSV file containing the sources catalogue will be written to disk.
+        finderoutdir (str): The output folder name for the reliability plot and the source catalogues.
+        finderoutname (str): The output file name for the reliability plot.
+    
     Kwargs:
-        objname (string): name of the object (Default: '')
-        plot_format (string): format type of the plots (pdf, jpg, png, ...) (Default: pdf)
-        ctr_width (float): line width of the contours (Default: 2)
-        verbose (bool): option to print messages and plot to terminal if True  
-        
+        finder_p_value (float): The p-value threshold of the Anderson-Darling test to reject non-Gaussian spectra. A spectrum is considered to have Gaussian noise if the p-value is greater than this threshold. (Default: 0.05)
+        kanekar_threshold (array-like): An array-like object of two float elements representing the minimum and maximum values of the Kanekar test to reject non-Gaussian spectra. A spectrum has Gaussian noise if the test value falls within this range. (Default: [0.8, 1.16])
+        objname (str): The name of the object. (Default: '')
+        plot_format (str): The format type of the plots (e.g., pdf, jpg, png). (Default: pdf)
+        ctr_width (float): The line width of the contours. (Default: 2)
+        verbose (bool): If True, messages and plots will be printed to the terminal.
+    
     Returns:
-        ValueError if no spectrum or its associated rms are provided
+        A detection mask and the rms of the last smoothing iteration.
+    
     Raises:
+        ValueError: If no spectrum or its associated rms are provided.
     """
-    #!!! ATTENZIONE: copy the description of the arguments in the private function as well !!!#
     #CHECK THE INPUT#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
-    format=kwargs['plot_format'] if 'plot_format' in kwargs else 'pdf'
+    verbose=kwargs.get('verbose',False)
+    plot_format='.'+kwargs.get('plot_format','pdf')
     if spectrum is None or spectrum_rms is None: #!!! ATTENZIONE: this can be improved. It can tell if the spectrum or the rms are missing. Also, can be avoided by running a warning and return None for the mask and the smooth_rms!!!
         raise ValueError('ERROR: No spectrum or its associated rms are provided. Cannot run the source finder!')
+    if type(spectrum_rms) in [list,np.ndarray]: #if the rms is a list of list or an ndarray
+        if len(spectrum_rms)!=len(spectrum): #if the input spectrum array has different size than the input rms array
+            raise ValueError('ERROR: Input spectrum and rms arrays have different sizes ({} and {}). Cannot run the source finder!'.format(len(spectrum),len(spectrum_rms)))
+    elif any(isinstance(i,list) for i in spectrum) or any(isinstance(i,np.ndarray) for i in spectrum): #if the rms is a number and the input spectrum is an ndarray or a list of list
+        spectrum_rms=np.repeat(rms,len(spectrum)) #make an array with the same size of the input spectral list/array
+    else: #if the rms is a number and the input spectrum is a 1D array or a single list
+        spectrum_rms=[spectrum_rms] #convert the rms into a nested list
+    if not any(isinstance(i,list) for i in spectrum) and not any(isinstance(i,np.ndarray) for i in spectrum): #if the input spectrum is not a nested list
+        spectrum=[spectrum] #convert into a nested list
     outdir=finderoutdir #store the output folder from the input parameters
     if outdir == '' or outdir is None:  #if the outdir is empty
-        outdir=kwargs['path'] if 'path' in kwargs else os.getcwd()+'/' #the outdir is the input folder
+        outdir=kwargs.get('path',os.getcwd()+'/') #the outdir is the input folder
     elif not os.path.exists(outdir): #if the output folder does not exist
         os.makedirs(outdir) #create the folder  
     outname=finderoutname #store the outputname from the input parameters
@@ -1791,174 +1814,383 @@ def lines_finder(spectrum=None,spectrum_rms=None,smooth_kernel=None,sc_threshold
         outname='source_findings_results'  #the outname is the data cube name plus _stack.pdf
     elif outname[0] != '.': #if the outname name start with a . means that it is a path to the cube (so differs from path parameter)
         outname=outdir+outname
-        
     #CHECK THE KWARGS#    
-    objname=kwargs['objname'] if 'objname' in kwargs else ''
-    ctr_width=kwargs['ctr_width'] if 'ctr_width' in kwargs else 2
-        
-    mad_to_std=1.48 #conversion between mad and std (std=1.48*mad) 
+    p_value=kwargs.get('finder_p_value',0.05)
+    kanekar_threshold=kwargs.get('kanekar_threshold',[0.8,1.16])
+    objname=kwargs.get('objname','')
+    ctr_width=kwargs.get('ctr_width',2)
     
     #---------------   START THE FUNCTION   ---------------#
     if verbose:
-        print('Running the source finder with the following parameters:\nFlux threshold: {}*rms\nSmoothing kernel(s): {} channel(s)\nLinker kernel(s): {} channel(s)\nReliability threshold: {}\n----------------------------------------------'.format(sc_threshold,smooth_kernel,link_kernel,rel_threshold))
-    #S+C FINDER#
-    if smooth_kernel is None or smooth_kernel==1:
-        mask=__source_finder(spectrum,sc_threshold*spectrum_rms) #run the source finding
-        smooth_rms=None #set the smoothed rms to None
-    else:
-        smooth_rms=[] #initialize the rms list after each smoothing
-        mask=np.zeros(spectrum.shape) #initialize the spectral mask
-        for ker in smooth_kernel: #for each smoothing kernel
-            dummy=spectrum.copy() #create a copy of the original spectrum
-            if sc_replace>0:
-                dummy[mask>0]=sc_replace*spectrum_rms*np.sign(dummy[mask>0]) #replace the already detected channels with a value equal to 'sc_replace'*rms and conserving the original sign
-            kernel=conv.Box1DKernel(ker) #define the smoothing boxcar kernel
-            smooth_spectrum=conv.convolve(dummy,kernel) #smooth the spectrum
+        print('Running the source finder with the following parameters:\nFlux threshold: {}*rms\nDetections replacement: {}*rms\nSmoothing kernel(s): {} channel(s)\nLinker kernel(s): {} channel(s)\nReliability threshold: {}\n----------------------------------------------'.format(sc_threshold,sc_replace,smooth_kernel,link_kernel,rel_threshold))
+    source_ids=[] #initialize the list of the sources ID
+    mask_list=[] #initialize the list for the masks
+    smooth_rms_list=[] #initialize the list for the rms of the smoothed spectra
+    anderson_test_list=[] #initialize the list of the anderson test result
+    g_test_list=[] #initialize the list of the gaussianity test result
+    for i in tqdm(range(len(spectrum)),desc='Spectra analysed',total=len(spectrum)): #for each input spectrum
+        #S+C FINDER#
+        if smooth_kernel is None or smooth_kernel==1:
+            mask=__source_finder(spectrum[i],sc_threshold*spectrum_rms[i]) #run the source finding
+            smooth_rms=spectrum_rms[i] #set the smoothed rms to the one of the spectrum
+        else:
+            smooth_rms=[] #initialize the rms list after each smoothing
+            mask=np.zeros(len(spectrum[i])) #initialize the spectral mask
+            for ker in smooth_kernel: #for each smoothing kernel
+                dummy=spectrum[i].copy() #create a copy of the original spectrum
+                if sc_replace>0:
+                    dummy[mask>0]=sc_replace*spectrum_rms[i]*np.sign(dummy[mask>0]) #replace the already detected channels with a value equal to 'sc_replace'*rms and conserving the original sign
+                kernel=conv.Box1DKernel(ker) #define the smoothing boxcar kernel
+                smooth_spectrum=conv.convolve(dummy,kernel) #smooth the spectrum
+                dummy=smooth_spectrum.copy() #create a copy of the smoothed spectrum for the new rms calculation
+                if sc_fluxrange == 'negative':
+                    dummy[dummy>=0]=np.nan #blank the positive flux values for rms calculation
+                elif sc_fluxrange=='positive':
+                    dummy[dummy<=0]=np.nan
+                rms=__get_rms(dummy,sc_statistics) #calculate the rms
+                smooth_rms.append(rms) #append the smmoth rms to the rms list
+                mask=np.add(mask,__source_finder(smooth_spectrum,sc_threshold*rms)) #run the source finding
             
-            ## W.I.P. don't use it. It must become a separate function which operates outside the source finder ##
-            #!!! ATTENZIONE: puoi pensare di creare la funzione __scale_noise(). Questa la devi usare in stacking prima di lanciare il source finder !!!
-            scalenoise=False
-            sn_fluxrange='negative'
-            sn_statistics='mad'
-            if scalenoise: #if the cube must be scaled to uniform the noise
-                smooth_data=np.empty(aligned_data.shape)
-                for ii in range(aligned_data.shape[1]):
-                    for jj in range(aligned_data.shape[2]):
-                        smooth_data[:,ii,jj]=conv.convolve(aligned_data[:,ii,jj],kernel)       
-                smooth_noise=[] #initialize the noise list
-                if sn_fluxrange == 'negative':
-                    smooth_data[smooth_data>=0]=np.nan #mask the positive values
-                if sn_statistics == 'std':
-                    for ii in range(aligned_data.shape[0]):
-                        smooth_noise.append(np.sqrt(np.mean(smooth_data[ii,:,:]**2)))
-                elif sn_statistics == 'mad':
-                    for ii in range(aligned_data.shape[0]):
-                        smooth_noise.append(mad_to_std*np.nanmedian(np.abs(smooth_data[ii,:,:]-np.nanmedian(smooth_data[ii,:,:]))))
-                smooth_noise=np.array(smooth_noise)
-                smooth_spectrum/=smooth_noise
-            ######################################################################################################
+        #LINKER#
+        if verbose:
+            print('Linking the detected lines\n----------------------------------------------')
+        mask=__source_linker(spectrum[i],mask,link_kernel,separation) #run the linker
+        source_ids.append(mask.copy()) #append the current mask, which cointains the sources IDs, to the sources IDs list
+        #GAUSSIANITY TESTS
+        if np.all(np.isnan(mask)): #if no sources have been found
+            if verbose:
+                warnings.warn('No sources have been found.')
+            if gaussianity:
+                anderson_test_list.append(np.nan)
+                g_test_list.append(np.nan)
+        else:
+            if gaussianity:
+                #ANDERSON-DARLING GAUSSIANITY#
+                dummy=spectrum[i].copy() #make a copy of the spectrum
+                dummy=dummy[np.isnan(mask)] #blank the detections
+                anderson_test=anderson(dummy) #perform the anderson test 
+                if anderson_test.statistic>=.6:
+                    p=np.exp(1.2937-5.709*anderson_test.statistic+.0186*anderson_test.statistic**2)
+                elif anderson_test.statistic>=.34:
+                    p=np.exp(0.9177-4.279*anderson_test.statistic-1.38*anderson_test.statistic**2)
+                elif anderson_test.statistic>=.2:
+                    p=1-np.exp(-8.318+42.796*anderson_test.statistic-59.938*anderson_test.statistic**2)
+                else:
+                    p=1-np.exp(-13.436+101.14*anderson_test.statistic-223.73*anderson_test.statistic**2) #store the p-value of the test. The p-value gives the probability that the spectrum is gaussian. If p>0.05, the spectrum can be considered gaussian
+                anderson_test_list.append(p)
+                
+                #GAUSSIANITY#
+                dummy=spectrum[i].copy() #make a copy of the spectrum
+                rms_0=__get_rms(dummy,sc_statistics) #calculate the rms before smmothing
+                dummy[~np.isnan(mask)]=np.nan #blank the detections
+                kernel=conv.Box1DKernel(10) #define the smoothing boxcar kernel
+                dummy=conv.convolve(dummy,kernel) #convolve the spectrum
+                test_rms=__get_rms(dummy,sc_statistics) #calculate the rms after smmothing
+                g_test=test_rms*np.sqrt(10)/rms_0 #we expect that the rms of the spectrum is reduced by a factor of sqrt(10) (see https://www.researchgate.net/publication/3635815_Effect_of_smoothing_window_length_on_RMS_EMG_amplitude_estimates). Based on mock gaussian spectra, 95% of the gaussian spectra have 1.16 >= g_test >= 0.8. So, a threshold of 0.8 and 1.16 could be a good value for rejecting non gaussian spectra (i.e., a spectrum is non gaussian if 0.8 < g_test < 1.16).
+                g_test_list.append(g_test)
+                    
+            #NEGATIVE FILTERING#
+            if not keep_negative: #if the negative sources must be descarded
+                mask[mask<=0]=np.nan #blank the negative sources
+            else:
+                mask[mask<0]=-1 #set to -1 the negative sources 
+            mask[mask>0]=1 #set to 1 the positive sources 
             
-            dummy=smooth_spectrum.copy() #create a copy of the smoothed spectrum for the new rms calculation
-            if sc_fluxrange == 'negative':
-                dummy[dummy>=0]=np.nan #blank the positive flux values for rms calculation
-            rms=__get_rms(dummy,sc_statistics) #calculate the rms
-            smooth_rms.append(rms)
-            mask=np.add(mask,__source_finder(smooth_spectrum,sc_threshold*rms)) #run the source finding
-          
-    #LINKER#
-    if verbose:
-        print('Linking the detected lines\n----------------------------------------------')
-    mask=__source_linker(spectrum,mask,link_kernel) #run the linker
-    if np.all(np.isnan(mask)): #if no sources have been found
+        #OUTPUT VARIABLE
+        mask_list.append(mask)
+        smooth_rms_list.append(smooth_rms)
+        
+    #RELIABILITY#
+    if rel_threshold>0: #if the reliability must be computed
+        #first we need to get all the detections. To do that, we take all the spectra and put them on a 1D array
         if verbose:
-            warnings.warn('No sources have been found.')
-    else:
-        #SOURCES CATALOGUE#
-        if verbose:
-            print('Creating the sources catalogue\n----------------------------------------------\n----------------------------------------------')
-        pos,neg=__get_sources_catalogue(spectrum,mask) #create the source catalogue
+            print('Splitting positive and negative sources\n----------------------------------------------\n----------------------------------------------')
+        sources=(np.array(spectrum)/np.array(spectrum_rms)[:,None]*np.abs(np.array(mask_list))).flatten() #.flatten() transforms the list of spectra, which is 2D (rows are the spectra, columns the channels) into a 1D. So now the spectra are one next to the other. If I have two spectra of 20 channels, 'spectrum' is a matrix of 20 columns and 2 rows and sources is an array of length 20 x 2 = 40.
+        ids=np.array(source_ids).flatten() #we do the same for the sources IDs list. The problem is that now we have many sources with the same ID. We have to replace all the positive and negative IDs, with incremental values.
+        largest_int=1 #starting positive ID
+        smallest_int=-1 #starting negative ID
+        pos_increment=False #starting positive increment switch
+        neg_increment=False #starting negative increment switch
+        for i in range(len(ids)): #run over all the sources IDs
+            if ~np.isnan(ids[i]): #if it is a detection
+                if ids[i] > 0: #if it is a positive detection
+                    if ids[i] != largest_int: #if its ID is not the largest
+                        ids[i]=largest_int #set it to the largest positive ID
+                    pos_increment=True #tell to increment the positive ID counter
+                elif ids[i] < 0: #if it is a negative detection
+                    if ids[i] != smallest_int: #if its ID is not the largest negative
+                        ids[i]=smallest_int #set it to the largest negative ID
+                    neg_increment=True #tell to increment the negative ID counter
+            elif pos_increment: #if it is a non-detection and the positive counter must be incremented
+                largest_int+=1 #increment the positive counter
+                pos_increment=False #disable the positive increment switch
+            elif neg_increment: #if it is a non-detection and the negative counter must be incremented
+                smallest_int-=1 #increment the negative counter
+                neg_increment=False #disable the negative increment switch
+        pos,neg=__get_sources_type(sources,ids) #split positive and negative sources
         if verbose:
             print('Total sources: {}\nPositive sources: {}\nNegative sources: {}\n----------------------------------------------\n----------------------------------------------'.format(len(pos)+len(neg),len(pos),len(neg)))
-            
-        #RELIABILITY#
-        if rel_threshold>0: #if the reliability must be computed
-            if verbose:
-                print('Rejecting unreliable sources\n----------------------------------------------')
-            plt.ioff()
-            total_rel=__get_reliability(pos,neg,rel_snrmin,rel_threshold,outdir=outdir,objname=objname,outname=outname,plot_format=format,ctr_width=ctr_width)
-            plt.ion()
-            if verbose:
-                print('Detected reliable lines for region {}: {}'.format(i+1,len(total_rel[total_rel>=rel_threshold])))
-            non_rel_idx=np.where(total_rel<0.9)[0]+1 #find the index of the non reliable sources. +1 is needed because python counts from 0. total_rel is an array of length equal to the number of positive sources. The first element is the first positive source, which has an index of 1.
-            for idx in non_rel_idx: #blank the non reliable sources
-                mask[mask==idx]=np.nan #the mask contains positive values (indexes of the positive sources) and negative values. I know the indexes of the non-reliable positive values, hence I can blank them
-                
-        #FINAL FILTERING#
-        mask[mask<=0]=np.nan #blank the negative sources
-        mask[mask>0]=1 #set to 1 the positive sources 
+        if verbose:
+            print('Rejecting unreliable sources\n----------------------------------------------')
+        plt.ioff()
+        reliability=__get_reliability(pos,neg,rel_snrmin,rel_threshold,outdir=outdir,objname=objname,plot_format=plot_format,ctr_width=ctr_width) #calculate the reliability of the positive sources
+        plt.ion()
         
-    return mask,smooth_rms
-         
+        reliable_ids=[] #initialize the reliable spectra indexes list
+        ids=np.reshape(ids,np.array(source_ids).shape) #restore the source IDs array to be a 2D matrix
+        rel_idx=np.where([reliability>=rel_threshold])[1] #find the spectra indexes containing reliable sources
+        for i in rel_idx: #for each reliable spectrum
+            reliable_ids.append(np.where(ids==i+1)[0][0]) #store its index
+        reliable_ids=np.array(reliable_ids) #convert the reliable spectra indexes into an array
+        
+        if verbose:
+            print('Detected reliable sources : {}'.format(len(total_rel[reliability>=rel_threshold])))
+        non_rel_idx=np.where(reliability<rel_threshold)[0]+1 #find the index of the non reliable sources. +1 is needed because python counts from 0. reliability is an array of length equal to the number of positive sources. The first element is the first positive source, which has an index of 1.
+        for idx in non_rel_idx: #blank the non reliable sources
+            mask[np.where(mask==idx)[0]]=np.nan #the mask contains positive values (indexes of the positive sources) and negative values. I know the indexes of the non-reliable positive values, hence I can blank them
+    else:
+        reliable_ids=None
+        
+    if write_catalogue: #if a catalogue must be written
+        chans=np.arange(len(spectrum[0]))
+        #to efficiently create the catalogue, we create each row as a list and append all rows to a list. 
+        #Then, we convert the list of list, where list[0] is the row 0, into a dataframe
+        catalogue=[] #initialize the catalogue as list (will become a list of list)
+        colnames=['Spectrum ID','Source ID','Channel min','Channel max','Channels','Flux','Rms','Flux density'] #names of the catalogue columns
+        if gaussianity:
+            colnames.append('Anderson test')
+            colnames.append('Kanekar test')
+        if rel_threshold>0:
+            colnames.append('Reliability')
+            k=0 #initialize the reliabile source counter
+        for i in range(len(spectrum)): #run over the spectra and extract the sources
+            if not np.all(np.isnan(source_ids[i])): #if there are sources in the spectrum i
+                for j in range(int(np.nanmin(source_ids[i])),int(np.nanmax(source_ids[i]))+1): #run over the source indexes of the i-spectrum
+                    if j!=0: #we have to omit 0 because it is not a source id
+                        row=[] #create a new row
+                        row.append(i+1) #spectrum ID
+                        row.append(j) #source ID
+                        chanmin=np.nanmin(np.where(source_ids[i]==j)[0])+1
+                        row.append(chanmin) #source channel min
+                        chanmax=np.nanmax(np.where(source_ids[i]==j)[0])+1
+                        row.append(chanmax) #source channel max
+                        row.append(chanmax-chanmin+1) #source channels. +1 is needed: if a source starts at channel 4 and ends at channel 6, it covers  6-4+1=3 channels, not 6-4=2 channels
+                        row.append(np.nansum(spectrum[i][source_ids[i]==j])) #source flux
+                        row.append(spectrum_rms[i]) #source rms
+                        row.append(np.nansum(spectrum[i][source_ids[i]==j])/((chanmax-chanmin+1)*spectrum_rms[i])) #source flux density: total flux / (N channels*rms)
+                        if gaussianity:
+                            row.append(anderson_test_list[i]) #anderson test value
+                            row.append(g_test_list[i]) #gaussianity test value
+                        if rel_threshold>0:
+                            if j>0: #if a positive source
+                                row.append(reliability[k+j-1]) #append its reliability value. -1 is needed because at the beginning, j=1 and k=0 so j+k=1 and not 0 as it should be.
+                            else: #if a negative source
+                                row.append(0) #append 0
+                        catalogue.append(row) #append the row to the catalogue
+                if j>0: #if the last value of j is positive (can be negative if spectrum i has only negative sources
+                    k+=j #increment the relibility counter by the maximum positive sources of the spectrum i
+        catalogue=pd.DataFrame(catalogue,columns=colnames) #convert the catalogue into a dataframe
+        filtered_catalogue=catalogue.copy() #create a copy of the catalogue
+        if rel_threshold > 0: #filter unreliable sources
+            filtered_catalogue=filtered_catalogue.drop(filtered_catalogue[filtered_catalogue['Reliability']<rel_threshold].index) #remove the non reliable sources
+        if gaussianity: #filter non-Gaussian spectra
+            filtered_catalogue=filtered_catalogue.drop(filtered_catalogue[(filtered_catalogue['Anderson test']<p_value) & ((filtered_catalogue['Kanekar test'] > kanekar_threshold[1]) | (filtered_catalogue['Kanekar test'] < kanekar_threshold[0]))].index)
+        catalogue.to_csv(outdir+'sources_catalogue.csv',index=False) #remove sources in non-Gaussian spectra
+        filtered_catalogue.to_csv(outdir+'sources_catalogue_filtered.csv',index=False)   
+
+    return mask_list,smooth_rms_list,reliable_ids
+
+#############################################################################################
+def noise_variations(datacube='',nv_statistics='mad',noiseoutdir='',noiseoutname='',**kwargs):
+    """Determine the noise variations of a data cube along the spatial and spectral axes.
+
+    Args:
+        datacube (str or ndarray): Name or path+name of the FITS data cube.
+        nv_statistics (str): Statistic to be used in the noise measurement. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is the fastest algorithm but the least robust one with respect to emission and artifacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artifacts.
+        noiseoutdir (str): Output folder name.
+        noiseoutname (str): Output file name.
+        
+    Kwargs:
+        path (str): Path to the data cube if the datacube is a name and not a path+name.
+        fluxunits (str): Flux units of the data (Default: None).
+        plot_format (str): File format of the plots.
+        verbose (bool): If True, print messages to the terminal (Default: False).
+    
+    Returns:
+        Plots of the root mean square (RMS) in each channel and each pixel. The pixel map is also returned as a FITS file if the input data cube is a FITS file.
+    
+    Raises:
+        ValueError: If no data cube is provided.
+        ValueError: If no path is provided.
+    """
+    #CHECK THE INPUT#
+    verbose=kwargs.get('verbose',False)
+    plot_format='.'+kwargs.get('plot_format','pdf')
+    datacube=__read_string(datacube,'datacube',**kwargs) #store the path to the data cube
+    outdir=noiseoutdir #store the output directory from the input parameters
+    if outdir == '' or outdir is None:  #if the outdir is empty
+        outdir=kwargs.get('path',os.getcwd()+'/') #the outdir is the input folder
+    elif not os.path.exists(outdir): #if the output folder does not exist
+        os.makedirs(outdir) #create the folder  
+    outname=noiseoutname #store the output name from the input parameters
+    if outname == '' or outname is None: #if the outname is empty
+        outname='noise_vs_'
+    if outname[0] != '.': #if the outname name start with a . means that it is a path to the cube (so differs from path parameter)
+        outname=outdir+outname
+    #CHECK THE KWARGS#
+    specunits=kwargs.get('specunits',None)
+    if specunits not in [None,'km/s','m/s','Hz']: #if wrong spatial units are given
+        raise ValueError('ERROR: Please provide the spectral units km/s, m/s or Hz. Aborting!')   
+    fluxunits=kwargs.get('fluxunits',None)
+    spectralres=kwargs.get('spectralres',None)
+
+    #---------------   START THE FUNCTION   ---------------#
+    data,header=__load(datacube) #open the data cube
+    #WE CHECK WHICH INFORMATION ARE ALREADY GIVEN#
+    #------------   FLUX UNITS    ------------#        
+    if fluxunits is None and 'BUNIT' in header: #if no spectral units are given and the keyword is in the header
+        fluxunits=header['BUNIT'] #store the spectral units from the cube header
+    elif fluxunits is None:
+        fluxunits='Jy/beam' #set the first channel to 0 km/s
+        if verbose:
+            warnings.warn('No flux unit was found: flux unit set to Jy/beam!')
+        
+    #WE DO THE NOISE ANALYSIS#
+    #------------   SPECTRAL    ------------#
+    if verbose:
+        print('Calculating the rms spectral variation\n----------------------------------------------') 
+    channels=np.arange(data.shape[0])+1 #channels axis
+    spectral_rms=[] #initialize the spectral rms list
+    for i in tqdm(np.arange(data.shape[0]),desc='Channel processed',total=data.shape[0]): #run through the spectral axis
+        spectral_rms.append(__get_rms(data[i,:,:],nv_statistics)) #for each channel map calculate the rms
+    spectral_rms=np.array(spectral_rms) #convert the list to an array
+    #------------   SPATIAL    ------------#
+    if verbose:
+        print('Calculating the rms spatial variation\n----------------------------------------------') 
+    spatial_rms=np.zeros((data.shape[1],data.shape[2])) #initialize the spatial rms map 
+    with tqdm(desc='Pixel processed',total=data.shape[1]*data.shape[2]) as pbar:   
+        for i in np.arange(data.shape[1]): #run over the pixels
+            for j in np.arange(data.shape[2]):
+                spatial_rms[i,j]=__get_rms(data[:,i,j],nv_statistics) #for each pixel calculate the rms
+                pbar.update(1)
+                
+    #------------   PLOTS    ------------#
+    if verbose:
+        print('Doing some fancy plots\n----------------------------------------------') 
+    fig=plt.figure(figsize=(8,4)) #create the figure for the frequency-dependence of the rms
+    ax=fig.add_subplot() #create the subplot for the rms
+    ax.plot(channels,spectral_rms,c='blue',lw=2)
+    ax.set_xlabel('Channel') #set the x-axis label
+    ax.set_ylabel('RMS [{}]'.format(fluxunits)) #set the y-axis label  
+    fig.savefig(outname+'frequency'+plot_format,dpi=300,bbox_inches='tight')
+    
+    fig=plt.figure(figsize=(7,7)) #create the figure for the frequency-dependence of the rms
+    if header is not None: #if a header is provided
+        wcs=WCS(header).dropaxis(2)
+        hdu=fits.PrimaryHDU(spatial_rms.astype('float32'),header=wcs.to_header()) #create the primary HDU
+        hdul=fits.HDUList([hdu]) #make the HDU list
+        hdul.writeto(outname+'position.fits',overwrite=True) #write the data into a fits
+        ax=fig.add_subplot(projection=wcs) #create the subplot for the rms
+        ax.set_xlabel('RA') #set the x-axis label
+        ax.set_ylabel('DEC'.format(fluxunits)) #set the y-axis label 
+    else:
+        ax=fig.add_subplot() #create the subplot for the rms
+        ax.set_xlabel('Pixel') #set the x-axis label
+        ax.set_ylabel('Pixel'.format(fluxunits)) #set the y-axis label 
+    norm=cl.PowerNorm(gamma=0.3,vmin=1.25*np.nanmin(spatial_rms),vmax=0.75*np.nanmax(spatial_rms)) #define the normalization from negative detection limit to 20% of the maximum
+    im=ax.imshow(spatial_rms,cmap='Greys_r',norm=norm,aspect='equal')
+    cb=fig.colorbar(im,ax=ax,location='top',pad=0.0,label='RMS [{}]'.format(fluxunits),shrink=0.85) #add the colorbar on top of the plot
+    cb.ax.tick_params(direction='in',length=5) #change the ticks of the colorbar from external to internal and made them longer
+    fig.savefig(outname+'position'+plot_format,dpi=300,bbox_inches='tight')
+    
+    if verbose: #if print-to-terminal option is true
+        plt.show() #show the figure
+    else:
+        plt.close()
+
+#############################################################################################
+def radial_profile():
+    return None
+             
 #############################################################################################
 def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmomoutname='',save=False,**kwargs):
-    """Plot the given moment maps. All (moment 0, moment 1 and moment 2) can be plotted simultaneously or only one.
-    
+    """Plot the given moment maps. All (moment 0, moment 1, and moment 2) can be plotted simultaneously or only one.
+
     Args:
-        which (string): what the function has to plot between:
-            all, plot moment 0, moment 1 and moment 2 map in a single 1-row 3-columns figure
-            mom0, plot moment 0 map
-            mom1, plot moment 1 map
-            mom2, plot moment 2 map
-        mom0map (string/ndarray): name or path+name of the fits moment 0
-        mom1map (string/ndarray): name or path+name of the fits moment 1
-        mom2map (string/ndarray): name or path+name of the fits moment 2
-        plotmomoutdir (string): output folder name
-        plotmomoutname (string): output file name
-        save (bool): save the plot if True
-    
+        which (str): Specifies what to plot:
+            - 'all': Plot moment 0, moment 1, and moment 2 maps in a single 1-row 3-column figure.
+            - 'mom0': Plot moment 0 map.
+            - 'mom1': Plot moment 1 map.
+            - 'mom2': Plot moment 2 map.
+        mom0map (str/ndarray): Name or path+name of the FITS moment 0 map.
+        mom1map (str/ndarray): Name or path+name of the FITS moment 1 map.
+        mom2map (str/ndarray): Name or path+name of the FITS moment 2 map.
+        plotmomoutdir (str): Output folder name.
+        plotmomoutname (str): Output file name.
+        save (bool): Saves the plot if True.
+
     Kwargs:
-        path (string): path to the moment map if the momXmap is a name and not a path+name
-        pbcorr (bool): apply the primary beam correction if True. Note that in that case you must supply a beam cube (Default: False)
-        beamcube (string/ndarray): name or path+name of the fits beam cube if pbcorr is True
-        use_cube (bool): use a data cube to get information like the rms, the spectral resolution and the beam if True (Default: False). Note that in that case you must supply a data cube
-        datacube (string/ndarray): name or path+name of the fits data cube if use_cube is True
-        pixunits (string): string with the spatial units (Default: None). Accepted values:
+        path (str): Path to the moment map if momXmap is a name and not a path+name.
+        pbcorr (bool): Applies the primary beam correction if True. Note that in that case, you must supply a beam cube. (Default: False)
+        beamcube (str/ndarray): Name or path+name of the FITS beam cube if pbcorr is True.
+        use_cube (bool): Uses a data cube to get information like the RMS, the spectral resolution, and the beam if True. Note that in that case, you must supply a data cube. (Default: False)
+        datacube (str/ndarray): Name or path+name of the FITS data cube if use_cube is True.
+        pixunits (str): String with the spatial units (Default: None). Accepted values:
             - None (it will try to retrieve them from the cube header)
             - deg
-            - armin
+            - arcmin
             - arcsec
-        specunits (string): string with the spectral units (Default: None). Accepted values:
+        specunits (str): String with the spectral units (Default: None). Accepted values:
             - None (it will try to retrieve them from the cube header)
             - km/s
             - m/s
             - Hz
-        spectralres (float): cube spectral resolution in km/s (Default: None)
-        bmaj (float): beam major axis in arcsec (Default: None)
-        bmin (float): beam minor axis in arcsec (Default: None)
-        bpa (float): beam position angle in degree (Default: None)
-        nsigma (float): lowest contour level in terms of nsigma*rms (Default: 3)
-        vsys (float): object systemic velocity in km/s (Default: None)
-        pixelres (float): pixel resolution of the data in arcsec (Default: None)
-        asectokpc (float): arcsec to kpc conversion to plot the spatial scale (Default: None)
-        objname (string): name of the object (Default: '')
-        subtitle (string): subtitle of the pv plot (Default: None)
-        wcs (astropy.WCS): wcs as astropy.WCS object to use in the plot. It will replace the default one (Default: None)
-        position (int): position of the subplot in the figure as triplet of integers (111 = nrow 1, ncol 1, index 1) (Default: 111)
-        rms (float): rms of the data cube in Jy/beam as a float. If not given (None), the function tries to calculate it (Default: None)
-        mom0_ctr (array-like): list or array of moment 0 contours level in units of 10^18. They will replace the default levels (Default: None)
-        mom1_ctr (array-like): list or array of moment 1 contours level in units of km/s. They will replace the default levels (Default: None)
-        mom2_ctr (array-like): list or array of moment 2 contours level in units of km/s. They will replace the default levels (Default: None)
-        lim (array-like): list or array of plot x and y limits as [xmin,xmax,ymin,ymax]. They will replace the default limits (Default: None)
-        mom0_cmap (string/ndarray): name of the colormap to be used for the moment 0 map. Accepted values are those of matplotlib.colors.Colormap (see: https://matplotlib.org/stable/tutorials/colors/colormaps.html) (Default: 'Greys')
-        mom1_cmap (string/ndarray): name of the colormap to be used for the moment 1 map. Accepted values are those of matplotlib.colors.Colormap (see: https://matplotlib.org/stable/tutorials/colors/colormaps.html) (Default: 'jet')
-        mom2_cmap (string/ndarray): name of the colormap to be used for the moment 2 map. Accepted values are those of matplotlib.colors.Colormap (see: https://matplotlib.org/stable/tutorials/colors/colormaps.html) (Default: 'YlGnBu')
-        ctr_width (float): line width of the contours (Default: 2)
-        matplotlib.colors.Colormap (see: https://matplotlib.org/stable/tutorials/colors/colormaps.html) (Default: 'Greys')
-        mom0_ctrmap (string/ndarray): name of the colormap to be used for the moment 0 map contour levels. Accepted values are those of matplotlib.colors.Colormap (see: https://matplotlib.org/stable/tutorials/colors/colormaps.html) (Default: 'hot')
-        mom2_ctrmap (string/ndarray): name of the colormap to be used for the moment 2 map contour levels. Accepted values are those of matplotlib.colors.Colormap (see: https://matplotlib.org/stable/tutorials/colors/colormaps.html) (Default: 'RdPu_r')
-        verbose (bool): option to print messages and plot to terminal if True (Default: False)
-    
+        spectralres (float): Cube spectral resolution in km/s. (Default: None)
+        bmaj (float): Beam major axis in arcsec. (Default: None)
+        bmin (float): Beam minor axis in arcsec. (Default: None)
+        bpa (float): Beam position angle in degrees. (Default: None)
+        nsigma (float): Lowest contour level in terms of nsigma*rms. (Default: 3)
+        vsys (float): Object systemic velocity in km/s. (Default: None)
+        pixelres (float): Pixel resolution of the data in arcsec. (Default: None)
+        asectokpc (float): Arcsec to kpc conversion to plot the spatial scale. (Default: None)
+        objname (str): Name of the object. (Default: '')
+        subtitle (str): Subtitle of the pv plot. (Default: None)
+        wcs (astropy.WCS): WCS as astropy.WCS object to use in the plot. It will replace the default one. (Default: None)
+        position (int): Position of the subplot in the figure as a triplet of integers (111 = nrow 1, ncol 1, index 1). (Default: 111)
+        rms (float): RMS of the data cube in Jy/beam as a float. If not given (None), the function tries to calculate it. (Default: None)
+        mom0_ctr (array-like): List or array of moment 0 contour levels in units of 10^18. They will replace the default levels. (Default: None)
+        mom1_ctr (array-like): List or array of moment 1 contour levels in units of km/s. They will replace the default levels. (Default: None)
+        mom2_ctr (array-like): List or array of moment 2 contour levels in units of km/s. They will replace the default levels. (Default: None)
+        lim (array-like): List or array of plot x and y limits as [xmin, xmax, ymin, ymax]. They will replace the default limits. (Default: None)
+        mom0_cmap (str/ndarray): Name of the colormap to be used for the moment 0 map. Accepted values are those of matplotlib.colors.Colormap. (Default: 'Greys')
+        mom1_cmap (str/ndarray): Name of the colormap to be used for the moment 1 map. Accepted values are those of matplotlib.colors.Colormap. (Default: 'jet')
+        mom2_cmap (str/ndarray): Name of the colormap to be used for the moment 2 map. Accepted values are those of matplotlib.colors.Colormap. (Default: 'YlGnBu')
+        ctr_width (float): Line width of the contours. (Default: 2)
+        mom0_ctrmap (str/ndarray): Name of the colormap to be used for the moment 0 map contour levels. Accepted values are those of matplotlib.colors.Colormap. (Default: 'hot')
+        mom2_ctrmap (str/ndarray): Name of the colormap to be used for the moment 2 map contour levels. Accepted values are those of matplotlib.colors.Colormap. (Default: 'RdPu_r')
+        verbose (bool): Option to print messages and plot to terminal if True. (Default: False)
+
     Returns:
         None
-    
+
     Raises:
-        ValueError: If 'which' argument does not match accepted values
-        ValueError: If no moment 0 or moment 1 or moment 2 are given
-        ValueError: If no path is provided
-        ValueError: If no output folder is set
-        ValueError: If no data cube is given when use_cube is True
+        ValueError: If the 'which' argument does not match accepted values.
+        ValueError: If no moment 0 or moment 1 or moment 2 is given.
+        ValueError: If no path is provided.
+        ValueError: If no output folder is set.
+        ValueError: If no data cube is given when use_cube is True.
     """
     #CHECK THE INPUT#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
+    verbose=kwargs.get('verbose',False)
     if which not in ['all','mom0','mom1','mom2']: #if wrong data is given
         raise ValueError("ERROR: wrong data selection. Accepted values: ['all','mom0','mom1','mom2']. Aborting")
     if which in ['all','mom0']: #if all moment maps must be plotted or only the moment 0
         if type(mom0map)==str or mom0map is None: #if the moment 0 map is a string
             mom0map=__read_string(mom0map,'mom0map',**kwargs) #store the path to the moment 0 map
         #------------   PB CORRECTION     ------------#
-        pbcorr=kwargs['pbcorr'] if 'pbcorr' in kwargs else False #store the apply pb correction option
+        pbcorr=kwargs.get('pbcorr',False) #store the apply pb correction option
         if pbcorr: #if the primary beam correction is applied
-            beamcube=kwargs['beamcube'] if 'beamcube' in kwargs else None #store the data cube path from the input parameters
+            beamcube=kwargs.get('beamcube',None) #store the data cube path from the input parameters
             if beamcube is None: #if the beam cube is not provided
                 if verbose:
                     warnings.warn('You have not provided a beam cube. Cannot apply primary beam correction!')
@@ -1968,13 +2200,13 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
     if which in ['all','mom1']: #if all moment maps must be plotted or only the moment 1 map
         if type(mom1map)==str or mom1map is None: #if the moment 1 map is a string
             mom1map=__read_string(mom1map,'mom1map',**kwargs) #store the path to the moment 1 map
-        vsys=kwargs['vsys'] if 'vsys' in kwargs else None #store the systemic velocity from the input kwargs
+        vsys=kwargs.get('vsys',None) #store the systemic velocity from the input kwargs
     if which in ['all','mom2']: #if all moment maps must be plotted or only the moment 2 map
         if type(mom2map)==str or mom2map is None: #if the moment 2 map is a string
             mom2map=__read_string(mom2map,'mom2map',**kwargs) #store the path to the moment 2 map
     outdir=plotmomoutdir #store the output folder from the input parameters
     if outdir == '' or outdir is None:  #if the outdir is empty
-        outdir=kwargs['path'] if 'path' in kwargs else os.getcwd()+'/' #the outdir is the input folder
+        outdir=kwargs.get('path',os.getcwd()+'/') #the outdir is the input folder
     elif not os.path.exists(outdir): #if the output folder does not exist
         os.makedirs(outdir) #create the folder  
     outname=plotmomoutname #store the outputname from the input parameters
@@ -1990,40 +2222,38 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
     elif outname[0] != '.': #if the outname name start with a . means that it is a path to the cube (so differs from path parameter)
         outname=outdir+outname
     #CHECK THE KWARGS#
-    use_cube=kwargs['use_cube'] if 'use_cube' in kwargs else False
+    use_cube=kwargs.get('use_cube',False)
     if use_cube: #if the use cube option is True
-        datacube=kwargs['datacube'] if 'datacube' in kwargs else None #store the data cube from the input kwargs
+        datacube=kwargs.get('datacube',None) #store the data cube from the input kwargs
         if datacube is None: #if the data cube is not provided
             raise ValueError('ERROR: you set to use a data cube but no data cube is provided: aborting!')
         elif type(datacube)==str: #if the data cube is a string
             datacube=__read_string(datacube,'datacube',**kwargs) #store the path to the data cube
-    pixunits=kwargs['pixunits'] if 'pixunits' in kwargs else None
-    specunits=kwargs['specunits'] if 'specunits' in kwargs else None
-    spectralres=kwargs['spectralres'] if 'spectralres' in kwargs else None
-    bmaj=kwargs['bmaj'] if 'bmaj' in kwargs else None
-    bmin=kwargs['bmin'] if 'bmin' in kwargs else None
-    bpa=kwargs['bpa'] if 'bpa' in kwargs else None
-    nsigma=kwargs['nsigma'] if 'nsigma' in kwargs else 3
-    rms=kwargs['rms'] if 'rms' in kwargs else None
-    cs_statistics=kwargs['cs_statistics'] if 'cs_statistics' in kwargs else 'mad'
-    pixelres=kwargs['pixelres'] if 'pixelres' in kwargs else None
-    asectokpc=kwargs['asectokpc'] if 'asectokpc' in kwargs else None
-    objname=kwargs['objname'] if 'objname' in kwargs else None
-    if objname is None: #if in kwargs but not set
-        objname='' #set it to empty
-    subtitle=kwargs['subtitle'] if 'subtitle' in kwargs else None
-    wcs=kwargs['wcs'] if 'wcs' in kwargs else None
-    position=kwargs['position'] if 'position' in kwargs else 111
-    mom0_ctr=kwargs['mom0_ctr'] if 'mom0_ctr' in kwargs else None
-    mom1_ctr=kwargs['mom1_ctr'] if 'mom1_ctr' in kwargs else None
-    mom2_ctr=kwargs['mom2_ctr'] if 'mom2_ctr' in kwargs else None
-    lim=kwargs['lim'] if 'lim' in kwargs else None
-    mom0_cmap=kwargs['mom0_cmap'] if 'mom0_cmap' in kwargs else 'Greys'
-    mom1_cmap=kwargs['mom1_cmap'] if 'mom1_cmap' in kwargs else 'jet'
-    mom2_cmap=kwargs['mom2_cmap'] if 'mom2_cmap' in kwargs else 'YlGnBu'
-    ctr_width=kwargs['ctr_width'] if 'ctr_width' in kwargs else 2
-    mom0_ctrmap=kwargs['mom0_ctrmap'] if 'mom0_ctrmap' in kwargs else 'hot'
-    mom2_ctrmap=kwargs['mom2_ctrmap'] if 'mom2_ctrmap' in kwargs else 'RdPu_r'
+    pixunits=kwargs.get('pixunits',None)
+    specunits=kwargs.get('specunits',None)
+    spectralres=kwargs.get('spectralres',None)
+    bmaj=kwargs.get('bmaj',None)
+    bmin=kwargs.get('bmin',None)
+    bpa=kwargs.get('bpa',None)
+    nsigma=kwargs.get('nsigma',3)
+    rms=kwargs.get('rms',None)
+    cs_statistics=kwargs.get('cs_statistics','mad')
+    pixelres=kwargs.get('pixelres',None)
+    asectokpc=kwargs.get('asectokpc',None)
+    objname=kwargs.get('objname','')
+    subtitle=kwargs.get('subtitle',None)
+    wcs=kwargs.get('wcs',None)
+    position=kwargs.get('position',111)
+    mom0_ctr=kwargs.get('mom0_ctr',None)
+    mom1_ctr=kwargs.get('mom1_ctr',None)
+    mom2_ctr=kwargs.get('mom2_ctr',None)
+    lim=kwargs.get('lim',None)
+    mom0_cmap=kwargs.get('mom0_cmap','Greys')
+    mom1_cmap=kwargs.get('mom1_cmap','jet')
+    mom2_cmap=kwargs.get('mom2_cmap','YlGnBu')
+    ctr_width=kwargs.get('ctr_width',2)
+    mom0_ctrmap=kwargs.get('mom0_ctrmap','hot')
+    mom2_ctrmap=kwargs.get('mom2_ctrmap','RdPu_r')
 
     #---------------   START THE FUNCTION   ---------------#
     #WE CHECK IF CUBE STATISTICS MUST BE COMPUTED#
@@ -2159,14 +2389,6 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
         nrows=1 #number of rows in the atlas
         ncols=3 #number of columns in the atlas        
         fig=plt.figure(figsize=(5*ncols,7*nrows)) #create the figure
-        if which == 'all': #if all moment maps must be plotted
-            fig.suptitle('{} HI moment maps'.format(objname),fontsize=24) #add the title
-        elif which == 'mom0': #if the moment 0 map must be plotted
-            fig.suptitle('{} HI moment 0 map'.format(objname),fontsize=24) #add the title
-        elif which == 'mom1': #if the moment 1 map must be plotted
-            fig.suptitle('{} HI moment 1 map'.format(objname),fontsize=24) #add the title
-        elif which == 'mom2': #if the moment 2 map must be plotted
-            fig.suptitle('{} HI moment 2 map'.format(objname),fontsize=24) #add the title
             
     #WE PREPARE THE MOMENT 0 SUBPLOT#
     if which == 'all' or which == 'mom0': #if all moment maps must be plotted or only the moment 0 map
@@ -2215,7 +2437,6 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
             ctr=np.array(mom0_ctr) #use the user-defined levels
         #WE DO THE PLOT#
         im=ax.imshow(mom0,cmap=mom0_cmap,norm=norm,aspect='equal') #plot the moment 0 map
-        ax.tick_params(direction='in') #change the ticks of the axes from external to internal
         ax.set_xlim(xlim) #set the xlim
         ax.set_ylim(ylim) #set the ylim
         ax.set_xlabel('RA') #set the x-axis label
@@ -2296,7 +2517,6 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
             ctr=np.array(mom1_ctr) #use the user-defined levels
         #WE DO THE PLOT#
         im=ax.imshow(mom1,cmap=mom1_cmap,norm=norm,aspect='equal') #plot the moment 1 map with a colormap centered on 0
-        ax.tick_params(direction='in') #change the ticks of the axes from external to internal
         ax.set_xlim(xlim) #set the xlim
         ax.set_ylim(ylim) #set the ylim
         ax.set_xlabel('RA') #set the x-axis label
@@ -2364,7 +2584,6 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
             ctr=np.array(mom2_ctr) #use the user-defined levels
         #WE DO THE PLOT#
         im=ax.imshow(mom2,cmap=mom2_cmap,aspect='equal') #plot the moment 2 map with a square-root colormap and in units of velocity dispersion
-        ax.tick_params(direction='in') #change the ticks of the axes from external to internal
         ax.set_xlim(xlim) #set the xlim
         ax.set_ylim(ylim) #set the ylim
         ax.set_xlabel('RA') #set the x-axis label
@@ -2393,7 +2612,7 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
                 
     #---------------   FIX SUBPLOTS AND SAVE/SHOW   ---------------#
     if which == 'all': #if all moment maps must be plotted
-        fig.subplots_adjust(left=0.07, bottom=0.1, right=0.97, top=0.85, wspace=0.0, hspace=0.3) #fix the position of the subplots in the figure   
+        fig.subplots_adjust(wspace=0.0,hspace=0.3) #fix the position of the subplots in the figure   
         if save: #if the save switch is true
             fig.savefig(outname,dpi=300,bbox_inches='tight') #save the figure
             
@@ -2401,43 +2620,42 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmomoutdir='',plotmo
             plt.show() #show the figure
         else:
             plt.close()
-        #fig.clf() #clear the figure from the memory
     
 #############################################################################################
 def removemod(datacube='',modelcube='',maskcube=None,method='subtraction',blankthreshold=0,write_fits=False,removemodoutdir='',
               removemodoutname='',**kwargs):
-    """Remove a model from a data cube using five methods: data-model (subtraction), data blanking (blanking), data-model after data blanking (b+s), data-model and negative residual blanking (negblank) and a combination of blanking and negblank (all).
+    """Remove a model from a data cube using one of the five available methods: data-model (subtraction), data blanking (blanking), data-model after data blanking (b+s), data-model and negative residual blanking (negblank), and a combination of blanking and negblank (all).
 
     Args:
-        datacube (string/ndarray): name or path+name of the fits data cube
-        modelcube (string/ndarray): name or path+name of the fits model cube
-        maskcube (string/ndarray): name or path+name of the fits 3D mask to be used in the removal
-        method (string): method to remove the model between:
-            all, apply blanking and negblank methods
-            blanking, blank the pixel in the data cube whose value in the model cube is > than blankthreshold
-            b+s, same has above but it subtracts the model from the data AFTER the blanking
-            negblank, subtract the model from the data and blank the negative residuals
-            subtraction, subtract the model from the data
-        blankthreshold (float): flux threshold for all, blanking and b+s methods
-        write_fits (boolean): store the output in a fits file (True) or return a variable (False)
-        removemodoutdir (string): output folder name
-        removemodoutname (string): file name
+        datacube (str or ndarray): The name or path+name of the FITS data cube.
+        modelcube (str or ndarray): The name or path+name of the FITS model cube.
+        maskcube (str or ndarray): The name or path+name of the FITS 3D mask to be used in the removal.
+        method (str): The method to remove the model. Accepted values are:
+            - 'all': Apply blanking and negblank methods.
+            - 'blanking': Blank the pixel in the data cube whose value in the model cube is > blankthreshold.
+            - 'b+s': Same as blanking, but subtract the model from the data after the blanking.
+            - 'negblank': Subtract the model from the data and blank the negative residuals.
+            - 'subtraction': Subtract the model from the data.
+        blankthreshold (float): The flux threshold for the 'all', 'blanking', and 'b+s' methods.
+        write_fits (bool): If True, store the output in a FITS file. If False, return a variable. (default: True)
+        removemodoutdir (str): The output folder name. (default: None)
+        removemodoutname (str): The file name. (default: None)
         
     Kwargs:
-        path (string): path to the data cube if the datacube is a name and not a path+name
-        verbose (bool): option to print messages to terminal if True 
+        path (str): The path to the data cube if datacube is a name and not a path+name.
+        verbose (bool): If True, print messages to the terminal. (default: False)
 
     Returns:
-        Data cube with the model removed as fits file
+        ndarray or None: The data cube with the model removed as a FITS file or None if write_fits is False.
         
     Raises:
-        ValueError: If no data cube is provided
-        ValueError: If no model cube is provided
-        ValueError: If no path is provided
-        ValueError: If method set do not match accepted values
+        ValueError: If no data cube is provided.
+        ValueError: If no model cube is provided.
+        ValueError: If no path is provided.
+        ValueError: If the method set does not match accepted values.
     """
     #CHECK THE INPUT#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
+    verbose=kwargs.get('verbose',False)
     if type(datacube)==str: #if the datacube is a string
         datacube=__read_string(datacube,'datacube',**kwargs) #store the path to the data cube
     if type(modelcube)==str: #if the modelcube is a string
@@ -2452,7 +2670,7 @@ def removemod(datacube='',modelcube='',maskcube=None,method='subtraction',blankt
     threshold=blankthreshold #store the blanking threshold from the input parameters
     outdir=removemodoutdir #store the output folder from the input parameters
     if outdir == '' or outdir is None:  #if the outdir is empty
-        outdir=kwargs['path'] if 'path' in kwargs else os.getcwd()+'/' #the outdir is the input folder
+        outdir=kwargs.get('path',os.getcwd()+'/') #the outdir is the input folder
     elif not os.path.exists(outdir): #if the output folder does not exist
         os.makedirs(outdir) #create the folder  
     outname=removemodoutname #store the outputname from the input parameters
@@ -2490,54 +2708,54 @@ def removemod(datacube='',modelcube='',maskcube=None,method='subtraction',blankt
         
 #############################################################################################
 def rotcurve(vfield='',pa=None,rotcenter=None,rotcurveoutdir='',rotcurveoutname='',save_csv=False,**kwargs):
-    """Compute the rotation curve of a galaxy and plot it and (optionally) save it as a csv file.
-
+    """Compute the rotation curve of a galaxy.
+    
     Args:
-        vfield (string): name or path+name of the fits velocity field
-        pa (float): object position angle in degree
-        rotcenter (array-like): x-y comma-separated coordinates of the rotational center in pixel
-        rotcurveoutdir (string):output folder name
-        rotcurveoutname (string):output file name
-        save_csv (bool):save the rotation curve as csv file if True
-        
+        vfield (str): The name or path of the fits velocity field.
+        pa (float): The position angle of the object in degrees.
+        rotcenter (array-like): The x-y coordinates of the rotational center in pixels.
+        rotcurveoutdir (str): The output folder name.
+        rotcurveoutname (str): The output file name.
+        save_csv (bool): If True, save the rotation curve as a CSV file.
+    
     Kwargs:
-        path (string): path to the moment map if the momXmap is a name and not a path+name
-        vsys (float): object systemic velocity in km/s
-        pixunits (string): string with the spatial units. Accepted values:
+        path (str): The path to the moment map if the momXmap is a name and not a path+name.
+        vsys (float): The systemic velocity of the object in km/s.
+        pixunits (str): String with the spatial units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
             - deg
-            - armin
+            - arcmin
             - arcsec
-        specunits (string): string with the spectral units. Accepted values:
+        specunits (str): String with the spectral units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
             - km/s
             - m/s
-            - Hz   
-        pixelres (float): pixel resolution of the data in arcsec
-        asectokpc (float): arcsec to kpc conversion to plot the spatial scale
-        objname (string): name of the object
-        verbose (bool): option to print messages and plot to terminal if True  
-
+            - Hz
+        pixelres (float): The pixel resolution of the data in arcsec.
+        asectokpc (float): The conversion factor from arcsec to kpc for plotting the spatial scale.
+        objname (str): The name of the object.
+        verbose (bool): If True, print messages and plot to the terminal.
+    
     Returns:
-        Plot and (optional) csv file of the galactic rotation curve
-        
+        None
+    
     Raises:
-        ValueError: If no velocity field is provided
-        ValueError: If no path is provided
-        ValueError: If no galactic center is set
-        ValueError: If galactic center is  not given as x-y comma-separated coordinates in pixel
-        ValueError: If no output folder is provided
+        ValueError: If no velocity field is provided.
+        ValueError: If no path is provided.
+        ValueError: If no galactic center is set.
+        ValueError: If the galactic center is not given as x-y comma-separated coordinates in pixels.
+        ValueError: If no output folder is provided.
     """    
     #CHECK THE INPUT#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
+    verbose=kwargs.get('verbose',False)
     if vfield == '' or vfield is None: #if a moment 1 map is not given
         raise ValueError('ERROR: velocity field is not set: aborting!')
     if vfield[0] != '.': #if the moment 1 map name start with a . means that it is a path to the map (so differs from path parameter)
-        if 'path' in kwargs: #if the path to the  moment 1 map is in kwargs
-            if kwargs['path'] == '' or kwargs['path'] is None:
-                raise ValueError('ERROR: no path to the velocity field is set: aborting!')
-            else:
-                vfield=kwargs['path']+vfield
-        else:
+        path=kwargs.get('path',None) #if the path to the  moment 1 map is in kwargs
+        if path == '' or path is None:
             raise ValueError('ERROR: no path to the velocity field is set: aborting!')
+        else:
+            vfield=path+vfield
     if pa is None: #if no position angle is given
         raise ValueError('ERROR: position angle is not set: aborting!')
     pa=np.radians(pa+90) #convert the position angle into effective angle in radians
@@ -2551,7 +2769,7 @@ def rotcurve(vfield='',pa=None,rotcenter=None,rotcurveoutdir='',rotcurveoutname=
         y0=center[1]-1 #convert the y-center into 0-indexing
     outdir=rotcurveoutdir #store the output folder from the input parameters
     if outdir == '' or outdir is None:  #if the outdir is empty
-        outdir=kwargs['path'] if 'path' in kwargs else os.getcwd()+'/' #the outdir is the input folder
+        outdir=kwargs.get('path',os.getcwd()+'/') #the outdir is the input folder
     elif not os.path.exists(outdir): #if the output folder does not exist
         os.makedirs(outdir) #create the folder  
     outname=rotcurveoutname #store the outputname from the input parameters
@@ -2560,15 +2778,12 @@ def rotcurve(vfield='',pa=None,rotcenter=None,rotcurveoutdir='',rotcurveoutname=
     elif outname[0] != '.': #if the outname name start with a . means that it is a path to the cube (so differs from path parameter)
         outname=outdir+outname
     #CHECK THE KWARGS#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
-    vsys=kwargs['vsys'] if 'vsys' in kwargs else None
-    pixunits=kwargs['pixunits'] if 'pixunits' in kwargs else None
-    specunits=kwargs['specunits'] if 'specunits' in kwargs else None
-    pixelres=kwargs['pixelres'] if 'pixelres' in kwargs else None
-    asectokpc=kwargs['asectokpc'] if 'asectokpc' in kwargs else None
-    objname=kwargs['objname'] if 'objname' in kwargs else None
-    if objname is None: #if in kwargs but not set
-        objname='' #set it to empty
+    vsys=kwargs.get('vsys',None)
+    pixunits=kwargs.get('pixunits',None)
+    specunits=kwargs.get('specunits',None)
+    pixelres=kwargs.get('pixelres',None)
+    asectokpc=kwargs.get('asectokpc',None)
+    objname=kwargs.get('objname','')
 
     #IMPORT THE DATA AND SETUP THE SPATIAL/SPECTRAL PROPERTIES#
     with fits.open(vfield) as V: #open the moment 1 map
@@ -2733,7 +2948,6 @@ def rotcurve(vfield='',pa=None,rotcenter=None,rotcurveoutdir='',rotcurveoutname=
     ncols=1 #number of columns in the atlas
     
     fig=plt.figure(figsize=(6*ncols,7*nrows)) #create the figure
-    fig.suptitle('{} rotation curve'.format(objname),fontsize=24) #add the title
     ax=fig.add_subplot(nrows,ncols,1) #create the subplot
     ax.plot(recradius,rec,color='red',label='receding side',linewidth=1.5,marker='o') #plot the receding rotation curve
     ax.plot(np.abs(appradius),np.abs(app),color='blue',label='Approaching side',linewidth=1.5,marker='o') #plot the approaching rotation curve
@@ -2744,81 +2958,84 @@ def rotcurve(vfield='',pa=None,rotcenter=None,rotcurveoutdir='',rotcurveoutname=
     ax.set_ylim(bottom=0)
     ax.legend(loc='lower right') #set the legend
     
-    fig.subplots_adjust(left=0.17, bottom=0.1, right=0.93, top=0.85, wspace=0.0, hspace=0.0) #fix the position of the subplots in the figure   
+    fig.subplots_adjust(wspace=0.0,hspace=0.0) #fix the position of the subplots in the figure   
     fig.savefig(outname,dpi=300,bbox_inches='tight') #save the figure
     
     if verbose: #if print-to-terminal option is true
         plt.show() #show the figure
     else:
         plt.close()
-    #fig.clf() #clear the figure from the memory
 
 #############################################################################################
-def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,shape='cones',nregions=None,from_to=None,between_angles=None,weighting=None,diagnostic=False,stackoutdir='',stackoutname='',**kwargs):
-    """Stack the spectra extracted from a given number of regions around a center starting from a minimum radius up to a maximum radius. Afterwards, it runs a source-finding algorithm on each stacked spectrum to check for detected lines. It optionally store diagnostic plots of the stacking and the source-finding routines and also optionally stores relevant diagnostic fits file of the source-finding routine.
+def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,shape='cones',nregions=None,from_to=None,between_angles=None,weighting=None,stack_fluxrange='negative',stack_statistics='mad',diagnostic=False,periodicity=False,stackoutdir='',stackoutname='',**kwargs):
+    """Stack the spectra extracted from a given number of regions around a center starting from a minimum radius up to a maximum radius. Afterwards, it runs a source-finding algorithm on each stacked spectrum to check for detected lines. It optionally stores diagnostic plots of the stacking and the source-finding routines and also optionally stores relevant diagnostic fits file of the source-finding routine.
 
     Args:
-        datacube (string/ndarray):name or path+name of the fits data cube
-        mask2d (string): name or path+name of the fits 2D emission mask
-        vfield (string): name or path+name of the fits velocity field to be used for the spectral alignment
-        pa (float): object position angle in degree.
-        inc (float): inclination of the object in degrees (0 deg means face-on)
-        stackcenter (array-like): x-y comma-separated coordinates of the rotational center in pixel 
-        shape (string): shape of regions to stack. Available shapes:
-            - cones: conic regions around a center and with width rmax-rmin
-            - concentric: concenctric circles around a center with radius (rmax-rmin)/nregions
-        nregions (int): number of regions from which the spectra are extracted and stacked
-        from_to (array-like): comma-separated min and max radius from the galactic center in pixunits from which the spectra are extracted and stacked
-        between_angles (array-like): comma-separated min and max angle from which the stacking regions are defined
-        weighting (string): type of weight to apply during the stacking between:
-            - None (default): the stacked spectrum will be avereged with the number of stacked spectra
-            - rms: the stacked spectrum will be avereged with the square of the rms of each stacked spectrum
-        diagnostic (boolean): store all the diagnostic files and plots. Warning: the diagnostic might occupy large portions of the disk (default: False)
-        stackoutdir (string): output folder name
-        stackoutname (string): output file name
+        datacube (str/ndarray): Name or path+name of the fits data cube.
+        mask2d (str): Name or path+name of the fits 2D emission mask. Set to None to disable the masking.
+        vfield (str): Name or path+name of the fits velocity field to be used for the spectral alignment. Set to None to disable the alignment.
+        pa (float): Object position angle in degrees.
+        inc (float): Inclination of the object in degrees (0 deg means face-on).
+        stackcenter (array-like): x-y comma-separated coordinates of the rotational center in pixels.
+        shape (str): Shape of regions to stack. Available shapes:
+            - cells: squares cells across the whole field.
+            - cones: conic regions around a center and with width rmax-rmin.
+            - concentric: concentric circles around a center with radius (rmax-rmin)/nregions.
+        nregions (int): Number of regions from which the spectra are extracted and stacked.
+        from_to (array-like): Comma-separated min and max radius from the galactic center in pixunits from which the spectra are extracted and stacked.
+        between_angles (array-like): Comma-separated min and max angle from which the stacking regions are defined.
+        weighting (str): Type of weight to apply during the stacking. Options:
+            - None (default): The stacked spectrum will be averaged with the number of stacked spectra.
+            - rms: The stacked spectrum will be averaged with the square of the rms of each stacked spectrum.
+        stack_fluxrange (str): Flux range to be used in the noise measurement of the source finder. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artifacts from affecting the noise measurement. If set to anything else, all pixels will be used in the noise measurement irrespective of their flux.
+        stack_statistics (str): Statistic to be used in the noise measurement process of the source finder. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is the fastest algorithm but the least robust one with respect to emission and artifacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artifacts.
+        diagnostic (bool): Store all the diagnostic files and plots. Warning: the diagnostic might occupy large portions of the disk (default: False).
+        stackoutdir (str): Output folder name.
+        stackoutname (str): Output file name.
         
     Kwargs:
-        path (string): path to the data cube and the velocity field if one or both is a name and not a path+name
-        pbcorr (bool): apply the primary beam correction if True. Note that in that case you must supply a beam cube (Default: False)
-        beamcube (string/ndarray): name or path+name of the fits beam cube if pbcorr is True
-        pixunits (string): string with the spatial units. Will be taken from cube header if not provided. Accepted values:
+        path (str): Path to the data cube and the velocity field if one or both is a name and not a path+name.
+        pbcorr (bool): Apply the primary beam correction if True. Note that in that case, you must supply a beam cube (Default: False).
+        beamcube (str/ndarray): Name or path+name of the fits beam cube if pbcorr is True.
+        pixunits (str): String with the spatial units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
             - deg
-            - armin
+            - arcmin
             - arcsec
-        specunits (string): string with the spectral units. Will be taken from cube header if not provided.  Accepted values:
+        specunits (str): String with the spectral units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
             - km/s
             - m/s
-            - Hz   
-        fluxunits (string): string with the flux units. Will be taken from cube header if not provided.
-        pixelres (float): pixel resolution of the data. Will be taken from cube header if not provided
-        spectralres (float): data spectral resolution in specunits. Will be taken from cube header if not provided
-        rms (float): rms of the data cube as a float in fluxunits (Default: None)
-        bmaj (float): beam major axis in pixunits (Default: None)
-        bmin (float): beam minor axis in pixunits (Default: None)
-        objname (string): name of the object (Default: '')
-        emission_width (float): velocity range in specunits to exclude from rms calculation in the stacked spectra. Set to 0 to compute the rms over the whole spectrum (Default: 200 km/s)
-        regrid (boolean): regrid the cube option (Default: False)
-        regrid_size (int): how many pixel to regrid. Set to 0 to regrid to a beam (Deafult: 0)
-        plot_format (string): format type of the plots (pdf, jpg, png, ...) (Default: pdf)
-        ctr_width (float): line width of the contours (Default: 2)
-        verbose (bool): option to print messages and plot to terminal if True  
-        **lines_finder arguments for the source finding (see the function lines_finder)
+            - Hz  
+        fluxunits (str): String with the flux units. Will be taken from the cube header if not provided.
+        pixelres (float): Pixel resolution of the data. Will be taken from the cube header if not provided.
+        spectralres (float): Data spectral resolution in specunits. Will be taken from the cube header if not provided.
+        rms (float): RMS of the data cube as a float in fluxunits (Default: None).
+        bmaj (float): Beam major axis in pixunits (Default: None).
+        bmin (float): Beam minor axis in pixunits (Default: None).
+        objname (str): Name of the object (Default: '').
+        plot_format (str): Format type of the plots (pdf, jpg, png, ...) (Default: pdf).
+        ctr_width (float): Line width of the contours (Default: 2).
+        verbose (bool): Option to print messages and plot to terminal if True.
+        **lines_finder_args: Arguments for the source finding (see the function lines_finder).
 
     Returns:
-        Plot of the stacking result and list of stacked spectrum for each region
+        A plot of the stacked spectra and the stacked regions, and arrays of each stacked spectrum, each stacked source, the stacked RMS, and the detection mask.
         
     Raises:
-        ValueError: If mandatory inputs are missing
-        ValueError: If no galactic center is set
-        ValueError: If galactic center is  not given as x-y comma-separated coordinates in pixel
-        ValueError: If no output folder is provided
-    """    
+        ValueError: If mandatory inputs are missing.
+        ValueError: If no galactic center is set.
+        ValueError: If the galactic center is not given as x-y comma-separated coordinates in pixels.
+        ValueError: If no output folder is provided.
+    """
     #CHECK THE INPUT#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
-    format=kwargs['plot_format'] if 'plot_format' in kwargs else 'pdf'
+    verbose=kwargs.get('verbose',False)
+    plot_format='.'+kwargs.get('plot_format','pdf')
     datacube=__read_string(datacube,'datacube',**kwargs) #store the path to the data cube
-    mask2d=__read_string(mask2d,'mask2d',**kwargs) #store the path to the 2D mask
-    vfield=__read_string(vfield,'vfield',**kwargs) #store the path to the velocity field
+    if mask2d is not None and (type(mask2d) is str and mask2d != ''): #if a 2D mask is provided
+        mask2d=__read_string(mask2d,'mask2d',**kwargs) #store the path to the 2D mask
+    if vfield is not None and (type(vfield) is str and vfield != ''): #if a velocity field is provided
+        vfield=__read_string(vfield,'vfield',**kwargs) #store the path to the velocity field
     center=stackcenter #store the rotation center from the input parameters
     inputs=np.array([pa,inc,center,nregions,from_to],dtype='object') #store the mandatory inputs
     inputsnames=['pa','inc','center','nregions','from_to'] #store the mandatory input names
@@ -2836,9 +3053,16 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
         rmax=from_to[1] #store the max radius
     outdir=stackoutdir #store the output folder from the input parameters
     if outdir == '' or outdir is None:  #if the outdir is empty
-        outdir=kwargs['path'] if 'path' in kwargs else os.getcwd()+'/' #the outdir is the input folder
+        outdir=kwargs.get('path',os.getcwd()+'/') #the outdir is the input folder
     elif not os.path.exists(outdir): #if the output folder does not exist
-        os.makedirs(outdir) #create the folder  
+        os.makedirs(outdir) #create the folder
+    plots_outdir=outdir+'stacked_spectra/' #create the directory for the stacked spectra plots
+    if not os.path.exists(plots_outdir): #if the output folder does not exist
+        os.makedirs(plots_outdir) #create the folder  
+    if periodicity: #if the spectra periodicity must be computed
+        periodicity_outdir=outdir+'periodicity_plots/' #create the directory for the stacked spectra plots
+        if not os.path.exists(periodicity_outdir): #if the output folder does not exist
+            os.makedirs(periodicity_outdir) #create the folder  
     outname=stackoutname #store the outputname from the input parameters
     if outname == '' or outname is None: #if the outname is empty
         outname='stacking_results'  #the outname is the data cube name plus _stack.pdf
@@ -2846,30 +3070,29 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
         outname=outdir+outname
         
     #CHECK THE KWARGS#
-    pbcorr=kwargs['pbcorr'] if 'pbcorr' in kwargs else False #store the apply pb correction option
+    pbcorr=kwargs.get('pbcorr',False) #store the apply pb correction option
     if pbcorr: #if the primary beam correction is applied
-        beamcube=kwargs['beamcube'] if 'beamcube' in kwargs else None #store the data cube path from the input parameters
+        beamcube=kwargs.get('beamcube',None) #store the data cube path from the input parameters
         if beamcube is None: #if the beam cube is not provided
             if verbose:
                 warnings.warn('You have not provided a beam cube. Cannot apply primary beam correction!')
             pbcorr=False #set the pbcorr option to False
         elif type(beamcube)==str: #if the beam cube is a string
             beamcube=__read_string(beamcube,'beamcube',**kwargs) #store the path to the beam cube
-    pixunits=kwargs['pixunits'] if 'pixunits' in kwargs else None
-    specunits=kwargs['specunits'] if 'specunits' in kwargs else None
-    fluxunits=kwargs['fluxunits'] if 'fluxunits' in kwargs else None
-    pixelres=kwargs['pixelres'] if 'pixelres' in kwargs else None
-    spectralres=kwargs['spectralres'] if 'spectralres' in kwargs else None
-    rms=kwargs['rms'] if 'rms' in kwargs else None
-    bmaj=kwargs['bmaj'] if 'bmaj' in kwargs else None
-    bmin=kwargs['bmin'] if 'bmin' in kwargs else None
-    objname=kwargs['objname'] if 'objname' in kwargs else ''
-    smooth_kernel=kwargs['smooth_kernel'] if 'smooth_kernel' in kwargs else None
-    sc_threshold=kwargs['sc_threshold'] if 'sc_threshold' in kwargs else None
-    link_kernel=kwargs['link_kernel'] if 'link_kernel' in kwargs else None
-    regrid=kwargs['regrid'] if 'regrid' in kwargs else False
-    regrid_size=kwargs['regrid_size'] if 'regrid_size' in kwargs else 0
-    ctr_width=kwargs['ctr_width'] if 'ctr_width' in kwargs else 2
+    pixunits=kwargs.get('pixunits',None)
+    specunits=kwargs.get('specunits',None)
+    fluxunits=kwargs.get('fluxunits',None)
+    pixelres=kwargs.get('pixelres',None)
+    spectralres=kwargs.get('spectralres',None)
+    rms=kwargs.get('rms',None)
+    bmaj=kwargs.get('bmaj',None)
+    bmin=kwargs.get('bmin',None)
+    objname=kwargs.get('objname','')
+    smooth_kernel=kwargs.get('smooth_kernel',None)
+    sc_threshold=kwargs.get('sc_threshold',None)
+    link_kernel=kwargs.get('link_kernel',None)
+    rel_threshold=kwargs.get('rel_threshold',None)
+    ctr_width=kwargs.get('ctr_width',2)
     
     if diagnostic: #if the diagnostic option is true
         diagnostic_outdir=outdir+'diagnostic/'
@@ -2878,7 +3101,8 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
                
     #IMPORT THE DATA AND SETUP THE SPATIAL/SPECTRAL PROPERTIES#
     data,header=__load(datacube) #load the data cube
-    mask,_=__load(mask2d) #load the mask
+    if mask2d is not None and (type(mask2d) is str and mask2d != ''): #if a 2D mask is provided
+        mask,_=__load(mask2d) #load the mask
 
     # NOW WE CHECK FOR THE RELEVANT INFORMATION #
     #------------   CUBE PROPERTIES    ------------#
@@ -2911,7 +3135,7 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
         raise ValueError('ERROR: I am still missing some information: {}. Please check the parameter!'.format(not_found))
           
     #PREPARE THE KWARGS FOR THE RMS PLOT#
-    converttoHI_kwargs={'beamarea':1.13*bmaj*bmin,'pixunits':pixunits,'spectralres':spectralres,'specunits':specunits}
+    converttoHI_kwargs={'pixelres':pixelres,'pixunits':pixunits,'spectralres':spectralres,'specunits':specunits,'beamarea':1.13*bmaj*bmin}
     
     #SETUP THE VELOCITY AXIS PROPERTIES#
     if 'CRVAL3' in header and 'CRPIX3' in header: #if the header has the starting spectral value
@@ -2948,102 +3172,63 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
             data/=beamcube #apply the primary beam correction
             
     #MASK THE EMISSION IN THE CUBE#
-    if verbose:
-        print('Masking the emission\n----------------------------------------------')
-    if mask.shape != data.shape[1:3]: #if the mask shape is not the same of the data cube
+    if mask2d is not None and (type(mask2d) is str and mask2d != ''): #if a 2D mask is provided
         if verbose:
-            warnings.warn('mask spatial shape {} and data spatial shape {} mismatch. Cannot apply the detection mask; make sure the supplied data cube is already masked from the emission.'.format(mask.shape,data.shape[1:3]))
-    else:
-        mask=mask.astype('float32') #convert the mask into a float array to assign nan values
-        
-        ## JUST TO TEST ##
-        mask[mask==0]=np.nan #set to nan the non-0 voxel
-        mask[mask>0]=1 #set to 1 the 0 voxel
-        ##################
-        
-        ## CORRECT PART ## 
-        #mask[np.isnan(mask)]=0
-        #mask[mask!=0]=np.nan #set to nan the non-0 voxel
-        #mask[mask==0]=1 #set to 1 the 0 voxel
-        ##################
-        
-        mask=np.array([mask]*data.shape[0]) #transform the 2D mask into a cube
-        data*=mask #mask the emission from the data
-        
-        if diagnostic:
+            print('Masking the emission\n----------------------------------------------')
+        if mask.shape != data.shape[1:3]: #if the mask shape is not the same of the data cube
             if verbose:
-                print('Writing the masked cube\n----------------------------------------------')
-            hdu=fits.PrimaryHDU(data.astype('float32'),header=header) #create the primary HDU
-            hdul=fits.HDUList([hdu]) #make the HDU list
-            if objname != '': #if the object name is given
-                hdul.writeto(diagnostic_outdir+'{}_masked_cube.fits'.format(objname),overwrite=True) #write the data into a fits
-            else:
-                hdul.writeto(diagnostic_outdir+'masked_cube.fits',overwrite=True) #write the data into a fits 
+                warnings.warn('mask spatial shape {} and data spatial shape {} mismatch. Cannot apply the detection mask; make sure the supplied data cube is already masked from the emission.'.format(mask.shape,data.shape[1:3]))
+        else:
+            mask=mask.astype('float32') #convert the mask into a float array to assign nan values
+            mask[mask==0]=np.nan #set to nan the 0 voxel
+            mask[~np.isnan(mask)]=1 #set to 1 the non-nan voxel
+            mask=np.array([mask]*data.shape[0]) #transform the 2D mask into a cube
+            data*=mask #mask the emission from the data
+        
+            if diagnostic:
+                if verbose:
+                    print('Writing the masked cube\n----------------------------------------------')
+                hdu=fits.PrimaryHDU(data.astype('float32'),header=header) #create the primary HDU
+                hdul=fits.HDUList([hdu]) #make the HDU list
+                if objname != '': #if the object name is given
+                    hdul.writeto(diagnostic_outdir+'{}_masked_cube.fits'.format(objname),overwrite=True) #write the data into a fits
+                else:
+                    hdul.writeto(diagnostic_outdir+'masked_cube.fits',overwrite=True) #write the data into a fits 
 
     #SHUFFLE THE DATA TO ALIGN THE CUBE#
-    if verbose:
-        print('Aligning the spectra\n----------------------------------------------')
-    if specunits == 'm/s': #if the spectral units are m/s
-        data=cubedo(cubedo=data,operation='shuffle',vfield=vfield,v0=v0*1000,spectralres=spectralres*1000,verbose=True)
-    else:
-        data=cubedo(cubedo=data,operation='shuffle',vfield=vfield,v0=v0,spectralres=spectralres,verbose=True)
-    
-    if diagnostic:
+    if vfield is not None: #if a velocity field is provided
         if verbose:
-            print('Writing the shuffled cube\n----------------------------------------------')
-        header['CRPIX3']=(nchan//2)+1 #update the header so that the velocity axis is 0 at the pixel at which profiles have been centred. +1 is needed for account the stupid python 0-counting
-        header['CRVAL3']=0. #update the header so that the velocity axis is 0 at the pixel at which profiles have been centred
-        hdu=fits.PrimaryHDU(data.astype('float32'),header=header) #create the primary HDU
-        hdul=fits.HDUList([hdu]) #make the HDU list
-        if objname != '': #if the object name is given
-            hdul.writeto(diagnostic_outdir+'{}_shuffled_cube.fits'.format(objname),overwrite=True) #write the data into a fits
+            print('Aligning the spectra\n----------------------------------------------')
+        if specunits == 'm/s': #if the spectral units are m/s
+            data=cubedo(cubedo=data,operation='shuffle',vfield=vfield,v0=v0*1000,spectralres=spectralres*1000,verbose=True)
         else:
-            hdul.writeto(diagnostic_outdir+'shuffled_cube.fits',overwrite=True) #write the data into a fits 
-            
-    #REDEFINE THE SPECTRAL AXIS#
-    if spectralres>0: #if the spectral resolution is positive
-        v0=-(nchan//2)*spectralres #redefine the starting velocity
-        v=np.arange(v0,v0+nchan*spectralres,spectralres) #redefine the spectral axis
-    else:
-        v0=(nchan//2)*spectralres #redefine the starting velocity
-        v=-np.arange(v0,v0-nchan*spectralres,-spectralres) #redefine the spectral axis
-    if len(v) > nchan: #!! sometimes an additional channel is created. For the moment, this is a workaround
-        v=v[:-1]
-        
-    ## REGRIDDING INTRODUCES LOTS OF SYSTEMATICS, AND IS NOT LOCALLY CONSERVING THE FLUX (ONLY GLOBALLY) ##
-    ## KEEP THIS PART HERE FOR BOOKKEEPING BUT REMOVE IT IN THE NEXT VERSION ##    
-    #REGRID THE CUBE IF NECESSARY#
-    if regrid: #if the cube must be regridded
-        data[np.isnan(data)]=0 #unblank the pixel
-        wcs=WCS(header).dropaxis(2) #store the wcs
-        if regrid_size==0: #if the regrid size is 0
-            regrid_size=int(bmaj//np.abs(pixelres)) #define how many pixel is a beam
-        regrid_header=wcs[::regrid_size,::regrid_size].to_header() #create the regridded header
-        header['NAXIS1']=data.shape[2]//regrid_size #redefine the x-axis
-        header['NAXIS2']=data.shape[1]//regrid_size #redefine the y-axis
-        for key in regrid_header.keys(): #update the header with the new wcs
-            if key in header.keys():
-                header[key]=regrid_header[key]
-        shape_out=tuple((data.shape[0],header['NAXIS1'],header['NAXIS2'])) #define the shape of the regridded cube
-        if verbose:
-            print('Spatially regridding the cube by a factor of {}\n----------------------------------------------'.format(regrid_size))
-        data=spatial_regrid((data,wcs),WCS(regrid_header),shape_out=shape_out,conserve_flux=True,return_footprint=False) #regrid the data
-        pixelres*=regrid_size #recalculate the pixel resolution
-        x0/=regrid_size #recalculate the stacking region center
-        y0/=regrid_size #recalculate the stacking region center
-        data[data==0]=np.nan #set the zero pixels back to nan
+            data=cubedo(cubedo=data,operation='shuffle',vfield=vfield,v0=v0,spectralres=spectralres,verbose=True)
+        aligned=True #set the aligned switch for the plots to True
         
         if diagnostic:
             if verbose:
-                print('Writing the regridded cube\n----------------------------------------------')
+                print('Writing the shuffled cube\n----------------------------------------------')
+            header['CRPIX3']=(nchan//2)+1 #update the header so that the velocity axis is 0 at the pixel at which profiles have been centred. +1 is needed for account the stupid python 0-counting
+            header['CRVAL3']=0. #update the header so that the velocity axis is 0 at the pixel at which profiles have been centred
             hdu=fits.PrimaryHDU(data.astype('float32'),header=header) #create the primary HDU
             hdul=fits.HDUList([hdu]) #make the HDU list
             if objname != '': #if the object name is given
-                hdul.writeto(diagnostic_outdir+'{}_{}x_regrid_cube.fits'.format(objname,regrid_size),overwrite=True) #write the data into a fits
+                hdul.writeto(diagnostic_outdir+'{}_shuffled_cube.fits'.format(objname),overwrite=True) #write the data into a fits
             else:
-                hdul.writeto(diagnostic_outdir+'{}x_regrid_cube.fits'.format(regrid_size),overwrite=True) #write the data into a fits 
-    ##########################################################################################################
-    
+                hdul.writeto(diagnostic_outdir+'shuffled_cube.fits',overwrite=True) #write the data into a fits 
+            
+        #REDEFINE THE SPECTRAL AXIS#
+        if spectralres>0: #if the spectral resolution is positive
+            v0=-(nchan//2)*spectralres #redefine the starting velocity
+            v=np.arange(v0,v0+nchan*spectralres,spectralres) #redefine the spectral axis
+        else:
+            v0=(nchan//2)*spectralres #redefine the starting velocity
+            v=-np.arange(v0,v0-nchan*spectralres,-spectralres) #redefine the spectral axis
+        if len(v) > nchan: #!! sometimes an additional channel is created. For the moment, this is a workaround
+            v=v[:-1]
+    else:
+        aligned=False #set the aligned switch for the plots to True
+        
     #ASSIGN THE PIXEL TO THE CORRECT REGION#
     if verbose:
         print('Assigning pixel to each stacking region\n----------------------------------------------')
@@ -3053,20 +3238,11 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
         xvalid,yvalid=__assign_to_cones(data,nregions,pa,inc,rmin,rmax,x0,y0) #assign the pixel to the cones     
     elif shape=='concentric':
         xvalid,yvalid=__assign_to_concentric(data,nregions,pa,inc,rmin,rmax,between_angles,x0,y0) #assign the pixel to the concentric circles
-        
-    #SETUP THE EMISSION RANGE#
-    emission_width=kwargs['emission_width'] if 'emission_width' in kwargs else 200000 #store the velocity range to exclude for rms calculation
-    if emission_width!=0: #if the emission width is given
-        if specunits == 'm/s': #if the spectral units are m/s
-            emission_width/=1000 
-        emission_width/=2 #half the emission width
-        if spectralres > 0: #if the spectral resolution is positive
-            emission_width*=-1 #invert the sign of the emission width
-        chmin=np.argmin(np.abs(v-emission_width)) #channel corresponding to -emission_width/2 km/s
-        chmax=np.argmin(np.abs(v+emission_width)) #channel corresponding to +emission_width/2 km/s  
+    elif shape=='cells':
+        xvalid,yvalid=__assign_to_cells(data,nregions) #assign the pixel to the cells
     
     #PREPARE THE FIGURES FOR THE RESULT#
-    wcs=WCS(header).dropaxis(2) #store the wcs
+    wcs=WCS(header,naxis=2) #store the wcs
     xmin=round(x0-rmax) #store the min x-coordinate
     xmax=round(x0+rmax) #store the max x-coordinate
     ymin=round(y0-rmax) #store the min y-coordinate
@@ -3074,165 +3250,266 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
     xlim=(xmin-0.1*(xmax-xmin),xmax+0.1*(xmax-xmin)) #set the xlim
     ylim=(ymin-0.1*(ymax-ymin),ymax+0.1*(ymax-ymin)) #set the ylim
     
-    fig1=plt.figure(figsize=(6,6)) #create the figure for the stacked positions
-    if objname!='': #if the object name is given
-        fig1.suptitle('{} stacked positions'.format(objname),fontsize=24) #add the title
-    else:
-        fig1.suptitle('Stacked positions',fontsize=24) #add the title
-    ax1=fig1.add_subplot(111,projection=wcs) #create the subplot for the stacked pixels
+    fig1=plt.figure(figsize=(16,8)) #create the figure for the stacked positions
+    ax1=fig1.add_subplot(121,projection=wcs) #create the subplot for the stacked pixels
     ax1.imshow(np.nansum(data,axis=0),origin='lower',aspect='equal',cmap='gray_r',norm=cl.PowerNorm(gamma=0.3,vmin=0,vmax=0.75*np.nanmax(np.nansum(data,axis=0)))) #plot the image
-    ax1.tick_params(direction='in') #change the ticks of the axes from external to internal
-    ax1.set_xlim(xlim) #set the xlim
-    ax1.set_ylim(ylim) #set the ylim
     ax1.set_xlabel('RA') #set the x-axis label
-    ax1.set_ylabel('DEC') #set the y-axis label  
-    
-    nrows=nregions #number of rows in the plot
-    ncols=2 #number of columns in the plot    
-    fig2=plt.figure(figsize=(8*ncols,4*nrows)) #create the figure for the stacked spectra
-    if objname!='': #if the object name is given
-        fig2.suptitle('{} stacking result'.format(objname),fontsize=24) #add the title
-    else:
-        fig2.suptitle('Stacking result',fontsize=24) #add the title
-
-    ## THE REFERENCE SPECTRUM IS USELESS ##
-    ## KEEP THIS PART AND ALL THE OTHERS WITH 'reference' FOR BOOKKEEPING BUT REMOVE IT IN THE NEXT VERSION ##       
-    reference=False
-    if reference:
-        fig3=plt.figure(figsize=(8*ncols,4*nrows)) #create the figure for the reference spectra
-        if objname!='': #if the object name is given
-            fig3.suptitle('{} reference spectra'.format(objname),fontsize=24) #add the title
-        else:
-            fig3.suptitle('Reference spectra',fontsize=24) #add the title
-    ##########################################################################################################
+    ax1.set_ylabel('DEC') #set the y-axis label 
+    if shape in ['cones','concentric']:
+        xmin=round(x0-rmax) #store the min x-coordinate
+        xmax=round(x0+rmax) #store the max x-coordinate
+        ymin=round(y0-rmax) #store the min y-coordinate
+        ymax=round(y0+rmax) #store the max y-coordinate  
+        xlim=(xmin-0.1*(xmax-xmin),xmax+0.1*(xmax-xmin)) #set the xlim
+        ylim=(ymin-0.1*(ymax-ymin),ymax+0.1*(ymax-ymin)) #set the ylim
+        ax1.set_xlim(xlim) #set the xlim
+        ax1.set_ylim(ylim) #set the ylim 
            
     cm=cl.LinearSegmentedColormap.from_list("",['black','orange','lime','deeppink','blue','yellow','cyan','red'])
     colors=cm(np.linspace(0,1,nregions))
         
     #DO THE STACKING#
     if verbose and diagnostic:
-        warnings.warn("you activated the diagnostic mode. Stacking may take a while and stores large quantity of plots in your disk! If you are using the Jupyter notebook with '%matplotlib inline' there will be a serious memory leak. To fix it, add 'import matplotlib' and matplotlib.use('agg') before running the stacking function.")
+        warnings.warn("You activated the diagnostic mode. Stacking may take a while and stores large quantity of plots in your disk! If there will be a serious memory leak, run 'import matplotlib' and matplotlib.use('agg') before using the stacking function.")
+    if verbose and nregions>50:
+        warnings.warn("You selected a large ({}) number of regions. Stacking may take a while and stores large quantity of plots in your disk! If there will be a serious memory leak, run 'import matplotlib' and matplotlib.use('agg') before using the stacking function.".format(nregions))
     validmap=np.zeros((data.shape[1],data.shape[2]),dtype=int) #initialize a map for showing the stacked positions. We want to draw contours over it, so the idea is to set each valid x,y pixel of the region i to have the value of i and then draw the contours on the map with level equal to i
     for i in range(nregions):
         if diagnostic:
-            plots_outdir=diagnostic_outdir+'region {}/'.format(i+1)
+            diagnostic_plots_outdir=diagnostic_outdir+'Region_{}_spectra/'.format(i+1)
         else:
-            plots_outdir=None
+            diagnostic_plots_outdir=None
         if xvalid[i] == [] and yvalid[i] == []: #if no valid pixels have been found
             warnings.warn('no valid pixel found for region {}. Skip to the next region'.format(i+1))
             spectrum=np.zeros(data.shape[0])*np.nan #set the output spectrum as nan
             rms=[np.nan] #set the output rms as nan
+            mask=np.zeros(data.shape[0])*np.nan #set the output spectrum as nan
         else: #proceed
             validmap[yvalid[i],xvalid[i]]=i+1 #store the value of i (+1 accounts for 0-counting) in the validmap
             ax1.contour(validmap,levels=[i,i+1],colors=cl.rgb2hex(colors[i]),linewidths=0.5) #draw the contour to show which pixels belong to the i-region
-            if verbose:
-                print('--------------------------------------------------------------------------------------------\n                               STACKING STARTED ON REGION {}              \n--------------------------------------------------------------------------------------------\n'.format(i+1))
-            if reference:
-                #CREATE THE REFERENCE NOISE SPECTRUM#
-                #It assumes that for a non-aligned cube, the stacking produces a spectrum of only noise, no matter how many spectra it stacks
-                if verbose:
-                    print('Computing the reference stacked spectrum\n----------------------------------------------')
-                reference_spectrum,reference_rms,reference_exp=__stack(data,xvalid[i],yvalid[i],weighting,ignore=[chmin,chmax],flip=flip,diagnostic=diagnostic,v=v,fluxunits=fluxunits,color=colors[i],outdir=plots_outdir,format='.jpg') #do the stacking
-                
+            text=ax1.text((np.nanmin(xvalid[i])+np.nanmax(xvalid[i]))/2,(np.nanmin(yvalid[i])+np.nanmax(yvalid[i]))/2,f'{i+1}',ha='center',va='center',color=colors[i]) #add the spectrum ID to the cell center
+            __auto_fit_fontsize(text,np.nanmax(xvalid[i])-np.nanmin(xvalid[i]),np.nanmax(yvalid[i])-np.nanmin(yvalid[i]),fig=fig1,ax=ax1)
+
             #CREATE THE STACKED SPECTRUM#
             if verbose:
-                print('Computing the stacked spectrum\n----------------------------------------------')
-            spectrum,rms,exp=__stack(data,xvalid[i],yvalid[i],weighting,ignore=[chmin,chmax],flip=flip,diagnostic=diagnostic,v=v,fluxunits=fluxunits,color=colors[i],outdir=plots_outdir,format='.jpg') #do the stacking
-            ylim=[np.nanmin(spectrum)*1.1,np.nanmax(spectrum)*1.1] #store the ylim of the plot
-
-            #SOURCE FINDING#
-            kwargs['finderoutname']='reliability_result_region_{}'.format(i+1) #set the name of the reliability plot
-            mask,smooth_rms=lines_finder(spectrum,rms[-1],**kwargs) #run the source finder
-            smooth_rms=smooth_rms[-1] if smooth_rms is not None else None #get the final value of the smooth rms if it is not None (like when no smoothing is applied)
-            mask[:chmin]=np.nan #remove the sources in the noise region
-            mask[chmax:]=np.nan #remove the sources in the noise region
+                print('Computing the stacked spectrum for region {}\n----------------------------------------------'.format(i+1))
+            spectrum,rms,exp=__stack(data,xvalid[i],yvalid[i],weighting,stack_fluxrange=stack_fluxrange,stack_statistics=stack_statistics,flip=flip,diagnostic=diagnostic,v=v,fluxunits=fluxunits,color=colors[i],aligned=aligned,outdir=diagnostic_plots_outdir,plot_format='.jpg') #do the stacking
+            if np.all(np.isnan(spectrum)): #if the spectrum contains only nans
+                rms=[np.nan] #set the rms to be nan
+            #PREPARE THE VARIABLES FOR THE LINES FINDER
+            if 'stacked_spectra' in locals(): #if not at the first iteration
+                stacked_spectra.append(spectrum) #append the latest stacking result
+                stacked_rms.append(rms[-1]) #append the rms value of the latest stacked spectrum
+                stacked_rms_list.append(rms) #append the list of rms value for each stacking iteration
+                stacked_exp.append(exp) #append the expected rms value
+                n_spectra.append(len(rms)) #append the number of stacked spectra (needed later for plot the result)
+            else:
+                stacked_spectra=[spectrum] #store the stacking result
+                stacked_rms=[rms[-1]] #store the rms value of the stacked spectrum
+                stacked_rms_list=[(rms)] #store the list of rms value for each stacking iteration
+                stacked_exp=[exp] #store the expected rms value
+                n_spectra=[len(rms)] #store the number of stacked spectra (needed later for plot the result)
+        
+    #SOURCE FINDING#
+    if verbose:
+        print('Running the lines finder on the stacked spectra\n----------------------------------------------')                
+    mask,smooth_rms,reliable_ids=lines_finder(stacked_spectra,stacked_rms,**kwargs) #run the source finder
+    
+    #ADD THE RESULT OF THE FINDER TO THE DETECTION MAP#
+    if verbose:
+        print('Creating the detection map and the output plots\n----------------------------------------------') 
+    detection_map=np.zeros((data.shape[1],data.shape[2]))*np.nan #initialize the detection map where we are going to show if a region has detections in it
+    cmap=cl.ListedColormap([(0.5,0,0),(0,0.5,0),(0.5,0.5,0)]) #define the colormap for the detections
+    ax2=fig1.add_subplot(122,projection=wcs) #create the subplot for the stacked pixels
+    ax2.imshow(np.nansum(data,axis=0),origin='lower',aspect='equal',cmap='gray_r',norm=cl.PowerNorm(gamma=0.3,vmin=0,vmax=0.75*np.nanmax(np.nansum(data,axis=0)))) #plot the image
+    ax2.set_xlabel('RA') #set the x-axis label
+    ax2.coords[1].set_ticklabel_visible(False) #hide the y-axis ticklabels and labels
+    if shape in ['cones','concentric']:
+        ax2.set_xlim(xlim) #set the xlim
+        ax2.set_ylim(ylim) #set the ylim 
+    if rel_threshold > 0 and  rel_threshold is not None: #if the reliability was computed
+        for j in reliable_ids:
+            detection_map[yvalid[j],xvalid[j]]=1 #add to the detection map only the reliable sources
+    for i in range(nregions): #reiter over the regions to plot and store the result of the line finder. I can't do that internally the first iteration because of the way the lines finder is written
+        plt.ioff() #disable the interactive plotting 
+        if periodicity: #if the periodicity plots must be made
+            mags_list=[] #create the list to store the periodicity amplitude of each spectrum and each smoothing iteration
+            for k in range(len(smooth_kernel)): #for each smoothing kernel
+                mags_list.append([]) #extend the periodicity amplitude list. We are going to store in each slot of the list the amplitudes of all the spectra for a given smoothing kernel
+        if not np.all(np.isnan(stacked_spectra[i])): #if the stacked spectrum is not empty
+            ylim=[np.nanmin(stacked_spectra[i])*1.1,np.nanmax(stacked_spectra[i])*1.1] #store the ylim of the plot 
             
-            #PLOT THE RESULT#
-            if reference:
-                plt.figure(2) #set the current figure to fig2
-            fig2=__plot_stack_result(v,spectrum,rms,exp[:len(rms)],smooth_rms,fluxunits,mask=mask,chmin=chmin,chmax=chmax,nrows=nrows,ncols=ncols,color=colors[i],aligned=True,ylim=ylim,idx=2*i+1,smooth_kernel=smooth_kernel,sc_threshold=sc_threshold,link_kernel=link_kernel,**converttoHI_kwargs)
-            if reference:
-                plt.figure(3) #set the current figure to fig3
-                fig3=__plot_stack_result(v,reference_spectrum,reference_rms,reference_exp[:len(reference_rms)],None,fluxunits,chmin=chmin,chmax=chmax,nrows=nrows,ncols=ncols,color=colors[i],aligned=True,ylim=ylim,idx=2*i+1,smooth_kernel=None,**converttoHI_kwargs)
+            if rel_threshold <=0 or rel_threshold is None: #if the reliability was not computed
+                dummy=mask[i].copy() #create a copy of the detection mask
+                if np.all(np.isnan(dummy)): #if no sources are detected
+                    pass
+                else:
+                    dummy=dummy[~np.isnan(dummy)] #get the sources
+                    if np.all(dummy<0): #if they are all negative
+                        detection_map[yvalid[i],xvalid[i]]=0
+                    elif np.all(dummy>0): #if they are all positive
+                        detection_map[yvalid[i],xvalid[i]]=1
+                    else: #if the sources are positive and negative
+                        detection_map[yvalid[i],xvalid[i]]=2
+            
+            #PLOT THE STACKED SPECTRA#
+            smooth_rms[i]=smooth_rms[i][-1] if smooth_rms[i] is not None else None #get the final value of the smooth rms if it is not None (like when no smoothing is applied)
+            nrows=1 #number of rows in the plot
+            ncols=2 #number of columns in the plot    
+            fig2=plt.figure(figsize=(8*ncols,4*nrows)) #create the figure for the stacked spectra
+            fig2=__plot_stack_result(v,stacked_spectra[i],stacked_rms_list[i],stacked_exp[i][:n_spectra[i]],smooth_rms[i],fluxunits,mask=np.abs(mask[i]),nrows=nrows,ncols=ncols,color=colors[i],aligned=aligned,ylim=ylim,idx=1,smooth_kernel=smooth_kernel,sc_threshold=sc_threshold,link_kernel=link_kernel,**converttoHI_kwargs)
+            fig2.savefig(plots_outdir+'stacked_spectrum_{}'.format(i+1)+'.jpg',dpi=300,bbox_inches='tight')
+            plt.close(fig=fig2)
+            
+            #DO THE PERIODICITY PLOTS#
+            if periodicity: #if the periodicity plots must be made
+                if verbose:
+                    warnings.warn("You activated the periodicity plots. Large quantity of plots may be stored in your disk! If there will be a serious memory leak, run 'import matplotlib' and 'matplotlib.use('agg')' before using the stacking function.")
+                    print('Computing the periodicity of the stacked spectra\n----------------------------------------------')
+                sampling=1/2 #sampling frequency for the FFT in order to convert frequency to channels when doing the plot
+                freqs=1/(2*sampling*np.fft.rfftfreq(len(stacked_spectra[i]),sampling)[1:]) #create the channel axis from the time axis
+                dummy_mask=mask[i].copy() #create a copy of the detection mask. We want to invert it in order to mask the detected emission
+                dummy_mask[~np.isnan(dummy_mask)]=0 #set to 0 the non-NaN values
+                dummy_mask[np.isnan(dummy_mask)]=1 #set to 1 the NaN values
+                dummy_mask[dummy_mask==0]=np.nan #set to NaN the 0-values
                 
-            if verbose:
-                print('--------------------------------------------------------------------------------------------\n                               STACKING FINISHED ON REGION {}              \n--------------------------------------------------------------------------------------------\n'.format(i+1))
-            
-        #PREPARE THE VARIABLE TO RETURN
-        if 'stacked_spectra' in locals(): #if not at the first iteration
-            stacked_spectra.append(spectrum) #append the latest stacking result
-            source_spectra.append(mask*spectrum) #append the latest source finder result
-            stacked_rms.append(rms[-1]) #append the rms value of the latest stacked spectrum
-        else:
-            stacked_spectra=[spectrum] #store the stacking result
-            source_spectra=[mask*spectrum] #store the source finder result
-            stacked_rms=[rms[-1]] #append the rms value of the stacked spectrum
+                alpha=np.linspace(0,1,len(smooth_kernel)+1)[1:] if len(smooth_kernel)>1 else 1 #set the transparency of the plots based on the number of smoothing kernels
+                lw=np.arange(len(smooth_kernel))+1 #set the linewidth
+                
+                period_fig=plt.figure(figsize=(10,10)) #create the figure
+                
+                period_ax1=period_fig.add_subplot(211) #add the subplot for the spectrum
+                period_ax1.set_title('Spectrum') #add the title
+                period_ax1.axhline(y=0,c='black',lw=1,ls='--')
+                period_ax1.set_xlabel('Channel')
+                period_ax1.set_ylabel('Amplitude [{}]'.format(fluxunits))
+                period_ax2=period_fig.add_subplot(212) #add the subplot for the FFT
+                period_ax2.set_title('FFT') #add the title
+                period_ax2.set_xlabel('Periodicity [Channel]')
+                period_ax2.set_ylabel('Amplitude [a.u.]')
+                
+                for k in range(len(smooth_kernel)): #for each kernel in the smoothing kernel
+                    dummy_spec=conv.convolve(stacked_spectra[i],conv.Box1DKernel(smooth_kernel[k])) #convolve the stacked spectrum masked from the detected emission
+                    mags=abs(np.fft.rfft(dummy_spec)[1:]) #compute the FFT and exclude the first element, which is the 0-channel periodicity. Also, take the absolute value beause we don't care about the phase
+                    mags_list[k].append(mags) #append the amplitudes of the given smoothing kernel
 
-    #format='jpg'        
-    if nregions>1: #if more than one region is used
-        fig2.subplots_adjust(top=0.975,hspace=0.25,wspace=0.05) #USE 0.975 IF nregions=30, else 0.95
-        if reference:
-            fig3.subplots_adjust(top=0.975,hspace=0.25,wspace=0.05) #USE 0.975 IF nregions=30, else 0.95
+                    #PERIODICITY PLOTS OF THE STACKED SPECTRUM i#
+                    period_ax1.plot(dummy_spec,c=colors[i],label='{} channels smoothing'.format(smooth_kernel[k]),alpha=alpha[k],lw=lw[k]) #plot the spectrum
+                    period_ax2.plot(freqs,mags,c=colors[i],alpha=alpha[k],lw=lw[k]) #plot the FFT
+
+                period_ax1.legend(loc='upper right')
+                period_ax1.set_xlim(0,len(stacked_spectra[i]))
+                period_ax2.set_xlim(freqs[-1],freqs[0])
+                period_ax2.set_xscale('log')
+                period_fig.subplots_adjust(hspace=0.3)
+                period_fig.savefig(periodicity_outdir+'spectrum_periodicity_{}.jpg'.format(i+1),dpi=300,bbox_inches='tight')
+                plt.close(fig=period_fig)
+        
+        #PREPARE THE VARIABLE TO RETURN#
+        if 'source_spectra' in locals(): #if not at the first iteration
+            source_spectra.append(np.abs(mask[i])*stacked_spectra[i]) #append the latest source finder result
+            source_mask.append(mask[i]) #append the detection mask
+        else:
+            source_spectra=[np.abs(mask[i])*stacked_spectra[i]] #store the source finder result
+            source_mask=[mask[i]] #store the detection mask
+    plt.ion() #re-enable the interactive plotting 
+    
+    #PLOT THE DETECTION MAP#
+    ## AT THE MOMENT THE FINAL DETECTION MAP IS NOT FILTERED FROM NON-GAUSSIAN SPECTRA ##
+    im=ax2.imshow(detection_map,origin='lower',aspect='equal',cmap=cmap,alpha=0.75,vmin=0,vmax=2) #plot the detection map
+    if rel_threshold<=0 or rel_threshold is None: #if the reliability was not computed
+        #adding a colorbar will shrink the corresponding image. To keep the images to the same size, I have to create a new axes and store the colrobar in it
+        cax=fig1.add_axes([0.9,0.125,0.02,0.755]) #create an axes on the right side of the figure
+        cbar=fig1.colorbar(im,cax=cax) #add the colorbar to this new axes
+        cbar.ax.get_yaxis().set_ticks([]) #blank the colorbar ticks
+        for j,label in enumerate(['Only neg.','Only pos.','Pos. and neg.']): #for each type of detection
+            cbar.ax.text(1,0.66*j+0.33,label,ha='center',va='center',rotation=90) #place the color label
+            #1 e' (vmax-vmin)/2
+            #0.66 e' (vmax-vmin)/(n_colors)
+            #0.33 e' il numero sopra diviso 2
+        cbar.ax.set_ylabel('For detection limit look at stacked spectra',rotation=90) #add the colorbar label
+        cbar.ax.get_yaxis().labelpad=10 #fix the position of the colorbar
+    fig1.subplots_adjust(wspace=0)
+    hdu=fits.PrimaryHDU(detection_map.astype('float32'),header=wcs.to_header()) #create the primary HDU
+    hdul=fits.HDUList([hdu]) #make the HDU list 
+    
+    #PLOT THE GLOBAL PERIODICITY PLOT#
+    if periodicity:
+        fig2=plt.figure(figsize=(10,5))
+        ax=fig2.add_subplot()
+        if objname != '': #if the object name is given
+            ax.set_title('{} stacked spectra median FFT'.format(objname))
+        for k in range(len(smooth_kernel)): #for each smoothing kernel
+            ax.plot(freqs,np.nanmedian(np.array(mags_list[k]),axis=0),c='b',alpha=alpha[k],lw=lw[k],label='{} channels smoothing'.format(smooth_kernel[k]))
+        ax.set_xlabel('Periodicity [Channel]')
+        ax.set_ylabel('Amplitude [a.u.]')
+        ax.set_xlim(freqs[-1],freqs[0])
+        ax.set_xscale('log')
+        ax.legend()
+        if objname != '': #if the object name is given
+            fig2.savefig(periodicity_outdir+'{}_total_fft.pdf'.format(objname),dpi=300,bbox_inches='tight')
+        else:
+            fig2.savefig(periodicity_outdir+'Total_fft.pdf',dpi=300,bbox_inches='tight')
+    
+    #SAVE THE FIGURES#
     if objname != '': #if the object name is given
-        fig1.savefig(outdir+'{}_stacked_positions'.format(objname)+'.'+format,dpi=300,bbox_inches='tight')
-        fig2.savefig(outname+'.'+format,dpi=300,bbox_inches='tight')
-        if reference:
-            fig3.savefig(outdir+'{}_reference_results'.format(objname)+'.'+format,dpi=300,bbox_inches='tight')
+        fig1.savefig(outdir+'{}_stacked_positions'.format(objname)+plot_format,dpi=300,bbox_inches='tight')
+        hdul.writeto(outdir+'{}_detection_positions.fits'.format(objname),overwrite=True) #write the data into a fits
     else:
-        fig1.savefig(outdir+'stacked_positions'+'.'+format,dpi=300,bbox_inches='tight')
-        fig2.savefig(outname+'.'+format,dpi=300,bbox_inches='tight')
-        if reference:
-            fig3.savefig(outdir+'reference_results'+'.'+format,dpi=300,bbox_inches='tight')
+        fig1.savefig(outdir+'stacked_positions'+plot_format,dpi=300,bbox_inches='tight')
+        hdul.writeto(outdir+'detection_positions.fits',overwrite=True) #write the data into a fits 
 
     if verbose:
         plt.show()
     else:
         plt.close('all')
         
-    return stacked_spectra,source_spectra,stacked_rms
+    return stacked_spectra,source_spectra,stacked_rms,source_mask#,source_ids,smooth_spectra,smooth_rms
                       
 #############################################################################################
 def velfi(vfield='',radii=None,vrot=None,pa=None,inc=None,vrad=None,vsys=None,vcenter=None,extend_only=False,correct=False,velfioutdir='',velfioutname='',**kwargs):
-    """Compute a syntethic velocity field or (optional) extend a given velocity field.
+    """Compute a synthetic velocity field or extend a given velocity field.
     
     Args:
-        vfield (string): name or path+name of the measured velocity field
-        radii (float/array-like): radii in pixunits at which the rotation velocity is measured
-        vrot (float/array-like): rotation velocities (subtracted from the systemic velocities) in specunits for the radii
-        pa (float/array-like): position angle of the object in degrees (counter-clockwise from the North to the most receding velocity)
-        inc (float/array-like): inclination of the object in degrees (0 deg means face-on)
-        vrad (float/array-like): expansion velocity for the radii
-        vsys (float/array-like): systemic velocity for the radii
-        center (array-like): comma-separated value for the x and y coordinates of the rotation center in pixel
-        extend_only (boolean): extend a given velocity field (True) or write a new one from scratch (False)
-        correct (boolean): correct the input rotation velocities for the inclination angles (True) or not (False)
-        velfioutdir (string): output folder name
-        velfioutname (string): output file name
-        
+        vfield (str): Name or path+name of the measured velocity field.
+        radii (float/array-like): Radii in pixel units at which the rotation velocity is measured.
+        vrot (float/array-like): Rotation velocities (subtracted from the systemic velocities) in specunits for the radii.
+        pa (float/array-like): Position angle of the object in degrees (counter-clockwise from the North to the most receding velocity).
+        inc (float/array-like): Inclination of the object in degrees (0 deg means face-on).
+        vrad (float/array-like): Expansion velocity for the radii.
+        vsys (float/array-like): Systemic velocity for the radii.
+        center (array-like): Comma-separated value for the x and y coordinates of the rotation center in pixels.
+        extend_only (bool): Flag to extend a given velocity field (True) or write a new one from scratch (False).
+        correct (bool): Flag to correct the input rotation velocities for the inclination angles (True) or not (False).
+        velfioutdir (str): Output folder name.
+        velfioutname (str): Output file name.
+    
     Kwargs:
-        path (string): path to the fits velocity field if the vfield is a name and not a path+name
-        pixelres (float): pixel resolution of the data in pixunits
-        pixunits (string): string with the spatial units. Accepted values:
+        path (str): Path to the FITS velocity field if 'vfield' is a name and not a path+name.
+        pixelres (float): Pixel resolution of the data in pixel units.
+        pixunits (str): String with the spatial units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
             - deg
-            - armin
+            - arcmin
             - arcsec
-        specunits (string): string with the spectral units. Accepted values:
+        specunits (str): String with the spectral units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
             - km/s
             - m/s
-            - Hz   
-        verbose (bool): option to print messages and plot to terminal if True (Default: False)
-             
+            - Hz
+        verbose (bool): Option to print messages and plots to the terminal if True (Default: False).
+    
     Returns:
-        Sythetic velocity field as fits file
+        Synthetic velocity field as a FITS file.
     
     Raises:
-        ValueError: If mandatory inputs are missing
-        ValueError: If no path to the velocity field is provided
-        ValueError: If wrong spatial units are provided
-        ValueError: If wrong spectral units are provided
+        ValueError: If mandatory inputs are missing.
+        ValueError: If no path to the velocity field is provided.
+        ValueError: If incorrect spatial units are provided.
+        ValueError: If incorrect spectral units are provided.
     """
     #CHECK THE INPUT#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
+    verbose=kwargs.get('verbose',False)
     if vfield == '' or vfield is None: #if a moment 1 map is not given
         raise ValueError('ERROR: velocity field is not set: aborting!')
     center=vcenter #store the rotational center
@@ -3248,7 +3525,7 @@ def velfi(vfield='',radii=None,vrot=None,pa=None,inc=None,vrad=None,vsys=None,vc
         y0=center[1]-1 #convert the y-center into 0-indexing
     outdir=velfioutdir #store the output folder from the input parameters
     if outdir == '' or outdir is None:  #if the outdir is empty
-        outdir=kwargs['path'] if 'path' in kwargs else os.getcwd()+'/' #the outdir is the input folder
+        outdir=kwargs.get('path',os.getcwd()+'/') #the outdir is the input folder
     elif not os.path.exists(outdir): #if the output folder does not exist
         os.makedirs(outdir) #create the folder     
     outname=velfioutname #store the output name from the input parameters
@@ -3257,9 +3534,9 @@ def velfi(vfield='',radii=None,vrot=None,pa=None,inc=None,vrad=None,vsys=None,vc
     if outname[0] != '.': #if the outname name start with a . means that it is a path to the cube (so differs from path parameter)
         outname=outdir+outname
     #CHECK THE KWARGS#
-    pixunits=kwargs['pixunits'] if 'pixunits' in kwargs else None
-    specunits=kwargs['specunits'] if 'specunits' in kwargs else None
-    pixelres=kwargs['pixelres'] if 'pixelres' in kwargs else None
+    pixunits=kwargs.get('pixunits',None)
+    specunits=kwargs.get('specunits',None)
+    pixelres=kwargs.get('pixelres',None)
     if pixunits is not None: #if the spatial units are given
         if pixunits not in ['deg','arcmin','arcsec']: #if wrong spatial units are given
             raise ValueError('ERROR: Please provide the spatial units in deg, arcmin or arcsec. Aborting!')
@@ -3344,37 +3621,54 @@ def velfi(vfield='',radii=None,vrot=None,pa=None,inc=None,vrad=None,vsys=None,vc
         result=field.copy()*np.nan #initialize the output as nans
      
     #---------------   START THE FUNCTION   ---------------#
-    for i in range(result.shape[0]):
-        for j in range(result.shape[1]):
-            if np.isnan(result[i,j]): #if the output in (i,j) is empty
-                x=(j-x0)*pixelres #convert the x-position of the pixel w.r.t. the center in arcsec
-                y=(i-y0)*pixelres #convert the y-position of the pixel w.r.t. the center in arcsec
-                r=np.sqrt(x**2+y**2) #calculate the distance from the center in arcsec
-                if r <= radii[nradii-1]: #if the distance is less or equal the outer radius
-                    d1=__radius(radii[0],x,y,pa[0],inc[0]) #calculate the radius of (x,y) compared to the innermost radius
-                    d2=__radius(radii[nradii-1],x,y,pa[nradii-1],inc[nradii-1]) #calculate the radius of (x,y) compared to the outermost radius
-                    if d1*d2 <= 0: #if one of the distance is negative, means that the points resides between the innermost and outermost radius, hence, it is okay to calculate the rotation velocity at that point
-                        for k in np.arange(1,nradii+1,1): #find the radius[i] corresponding to that point
-                            d2=__radius(radii[k],x,y,pa[k],inc[k]) #keep calculate the distance between the radius of (x,y) and the k-radius
-                            if d1*d2 > 0: #when both distances are positive, means that we have reached the outermost radius
-                                d1=d2 #set the two distances to be equal
+    rmax=radii[-1]/np.abs(pixelres) #convert the max radius into pixel
+    xmin=round(x0-rmax) #store the min x-coordinate
+    if xmin<0: #if xmin is less than 0
+        xmin=0 #set to 0
+    xmax=round(x0+rmax) #store the max x-coordinate
+    if xmax>=field.shape[1]: #if xmax is greater than the x-shape of the data
+        xmax=field.shape[1]-1 #set to the x-shape of the data
+    ymin=round(y0-rmax) #store the min y-coordinate
+    if ymin<0: #if ymin is less than 0
+        ymin=0 #set to 0
+    ymax=round(y0+rmax) #store the max y-coordinate
+    if ymax>=field.shape[0]: #if xmax is greater than the y-shape of the data
+        ymax=field.shape[0]-1 #set to the y-shape of the data   
+    yrange=np.arange(ymin,ymax+1) #define the y-range
+    xrange=np.arange(xmin,xmax+1) #define the x-range
+    with tqdm(desc='Pixel computed',total=len(xrange)*len(yrange)) as pbar:
+        for i in yrange:
+            for j in xrange:
+                if np.isnan(result[i,j]): #if the output in (i,j) is empty
+                    x=(j-x0)*pixelres #convert the x-position of the pixel w.r.t. the center in arcsec
+                    y=(i-y0)*pixelres #convert the y-position of the pixel w.r.t. the center in arcsec
+                    r=np.sqrt(x**2+y**2) #calculate the distance from the center in arcsec
+                    if r <= radii[nradii-1]: #if the distance is less or equal the outer radius
+                        d1=__radius(radii[0],x,y,pa[0],inc[0]) #calculate the radius of (x,y) compared to the innermost radius
+                        d2=__radius(radii[nradii-1],x,y,pa[nradii-1],inc[nradii-1]) #calculate the radius of (x,y) compared to the outermost radius
+                        if d1*d2 <= 0: #if one of the distance is negative, means that the points resides between the innermost and outermost radius, hence, it is okay to calculate the rotation velocity at that point
+                            for k in np.arange(1,nradii+1,1): #find the radius[i] corresponding to that point
+                                d2=__radius(radii[k],x,y,pa[k],inc[k]) #keep calculate the distance between the radius of (x,y) and the k-radius
+                                if d1*d2 > 0: #when both distances are positive, means that we have reached the outermost radius
+                                    d1=d2 #set the two distances to be equal
+                                else:
+                                    break
+                            R=(radii[k]*d1-radii[k-1]*d2)/(d1-d2)
+                            w1=(radii[k-1]-R)/(radii[k-1]-radii[k]) #calculate the weight of the radius k-1
+                            w2=1-w1 #calculate the weight of the radius k
+                            posai=w1*pa[k]+w2*pa[k-1] #calculated the weighted position angle
+                            incli=w1*inc[k]+w2*inc[k-1] #calculated the weighted inclination angle
+                            vroti=w1*vrot[k]+w2*vrot[k-1] #calculated the weighted rotation velocity
+                            vradi=w1*vrad[k]+w2*vrad[k-1] #calculated the weighted expansion velocity
+                            vsysi=w1*vsys[k]+w2*vsys[k-1] #calculated the weighted systemic velocity
+                            if R == 0:
+                                cost=1
+                                sint=0
                             else:
-                                break
-                        R=(radii[k]*d1-radii[k-1]*d2)/(d1-d2)
-                        w1=(radii[k-1]-R)/(radii[k-1]-radii[k]) #calculate the weight of the radius k-1
-                        w2=1-w1 #calculate the weight of the radius k
-                        posai=w1*pa[k]+w2*pa[k-1] #calculated the weighted position angle
-                        incli=w1*inc[k]+w2*inc[k-1] #calculated the weighted inclination angle
-                        vroti=w1*vrot[k]+w2*vrot[k-1] #calculated the weighted rotation velocity
-                        vradi=w1*vrad[k]+w2*vrad[k-1] #calculated the weighted expansion velocity
-                        vsysi=w1*vsys[k]+w2*vsys[k-1] #calculated the weighted systemic velocity
-                        if R == 0:
-                            cost=1
-                            sint=0
-                        else:
-                            cost=(-x*np.sin(posai)+y*np.cos(posai))/R
-                            sint=((-x*np.cos(posai)-y*np.sin(posai))/R)/np.cos(incli)
-                        result[i,j]=vsysi+(vroti*cost+vradi*sint)*np.sin(incli) #calculate the rotation velocity
+                                cost=(-x*np.sin(posai)+y*np.cos(posai))/R
+                                sint=((-x*np.cos(posai)-y*np.sin(posai))/R)/np.cos(incli)
+                            result[i,j]=vsysi+(vroti*cost+vradi*sint)*np.sin(incli) #calculate the rotation velocity
+                            pbar.update(1)
     
     #WE DO THE PLOT#
     wcs=WCS(header)
@@ -3394,11 +3688,9 @@ def velfi(vfield='',radii=None,vrot=None,pa=None,inc=None,vrad=None,vsys=None,vc
     vmax=np.nanmax(result) #set the max value of normalization
     
     fig=plt.figure(figsize=(5*ncols,7*nrows)) #create the figure
-    fig.suptitle('Velfi output',fontsize=24) #add the title
     
     ax=fig.add_subplot(nrows,ncols,1,projection=wcs) #create the subplot
     ax.imshow(field,origin='lower',vmin=vmin,vmax=vmax,aspect='equal',cmap='jet') #plot the original field
-    ax.tick_params(direction='in') #change the ticks of the axes from external to internal
     ax.set_xlim(xlim) #set the xlim
     ax.set_ylim(ylim) #set the ylim
     ax.set_xlabel('RA') #set the x-axis label
@@ -3407,7 +3699,6 @@ def velfi(vfield='',radii=None,vrot=None,pa=None,inc=None,vrad=None,vsys=None,vc
     
     ax=fig.add_subplot(nrows,ncols,2,projection=wcs) #create the subplot
     ax.imshow(result,origin='lower',vmin=vmin,vmax=vmax,aspect='equal',cmap='jet') #plot the original field
-    ax.tick_params(direction='in') #change the ticks of the axes from external to internal
     ax.set_xlim(xlim) #set the xlim
     ax.set_ylim(ylim) #set the ylim
     ax.set_xlabel('RA') #set the x-axis label
@@ -3415,7 +3706,6 @@ def velfi(vfield='',radii=None,vrot=None,pa=None,inc=None,vrad=None,vsys=None,vc
     ax.set_title('Extended Field',pad=20,fontsize=20)
     ax.coords[1].set_ticklabel_visible(False) #hide the y-axis ticklabels and labels
     
-    fig.subplots_adjust(left=0.17, bottom=0.1, right=0.93, top=0.99, wspace=0.0, hspace=0.0) #fix the position of the subplots in the figure 
     fig.savefig(outname.replace('fits','pdf'),dpi=300,bbox_inches='tight') #save the figure
     if verbose: #if print-to-terminal option is true
         plt.show() #show the figure
@@ -3429,30 +3719,32 @@ def velfi(vfield='',radii=None,vrot=None,pa=None,inc=None,vrad=None,vsys=None,vc
 ################################ --- ANCILLARY FUNCTIONS --- ################################
 #############################################################################################
 def converttoHI(data,fluxunits='Jy/beam',beamarea=None,pixunits='deg',spectralres=None,specunits='m/s'):
-    """Convert the flux in an array into HI column density.
+    """Convert an array of flux values into HI column density.
 
     Args:
-        data (string/array): name or path+name of the fits data, or array of the data
-        fluxunits (string): string with the flux units
-        beamarea (float): area of the beam in pixunits^2
-        pixunits (string): string with the spatial units. Accepted values:
+        data (str/array): Name or path+name of the fits data, or array of the data.
+        fluxunits (str): String indicating the units of flux.
+        beamarea (float): Area of the beam in pixel units squared.
+        pixunits (str): String with the spatial units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
             - deg
-            - armin
+            - arcmin
             - arcsec
-        spectralres (float): data spectral resolution in specunits
-        specunits (string): string with the spectral units. Accepted values:
+        specunits (str): String with the spectral units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
             - km/s
             - m/s
             - Hz
-
+        spectralres (float): Spectral resolution of the data in spectral units.
+    
     Returns:
-        Flux array converted into HI column density
+        Array of flux values converted into HI column density.
         
     Raises:
-        ValueError: If wrong spatial units are provided
-        ValueError: If wrong spectral units are provided
-        ValueError: If no spectral resolution and beam area are provided when given the data as array
-        ValueError: If no beam information is provided
+        ValueError: If incorrect spatial units are provided.
+        ValueError: If incorrect spectral units are provided.
+        ValueError: If no spectral resolution and beam area are provided when the data is given as an array.
+        ValueError: If no beam information is provided.
     """
     #CHECK THE INPUT#
     if pixunits not in ['deg','arcmin','arcsec']: #if wrong spatial units are given
@@ -3504,17 +3796,17 @@ def converttoHI(data,fluxunits='Jy/beam',beamarea=None,pixunits='deg',spectralre
 
 #############################################################################################
 def cosmo(z,H0,omega_matter,omega_vacuum,verbose=True):
-    """Given a cosmological model and the redshift of an object, it calculates the relevant cosmological  quantitities (distances, age of Unvierse, light travel time, ...) for that object.
+    """Given a cosmological model and the redshift of an object, this function calculates various cosmological quantities such as distances, age of the Universe, and light travel time for that object.
 
     Args:
-        z (float): redshift of the object
-        H0 (float): Hubble Parameter in km/s*Mpc
-        omega_matter (float): Omega for the matter
-        omega_vacuum (float): Omega for the vacuum
-        verbose (bool): option to print messages to terminal if True 
-
+        z (float): Redshift of the object.
+        H0 (float): Hubble Parameter in km/s*Mpc.
+        omega_matter (float): Omega for matter.
+        omega_vacuum (float): Omega for vacuum.
+        verbose (bool): If True, messages will be printed to the terminal.
+    
     Returns:
-        Python dictionary with the cosmological quantities of a given object
+        dict: A Python dictionary containing the cosmological quantities of the given object.
         
     Raises:
         None
@@ -3616,43 +3908,44 @@ def cosmo(z,H0,omega_matter,omega_vacuum,verbose=True):
     
 #############################################################################################
 def getHImass(data,fluxunits='Jy/beam*m/s',beamarea=None,pixelres=None,pixunits='deg',pbcorr=False,distance=None,box=None,**kwargs):
-    """Compute the HI mass of a given array.
+    """Convert an nD-array of flux densities into HI mass.
 
     Args:
-        data (string/array): name or path+name of the fits data, or array of the data
-        fluxunits (string): string with the flux units
-        beamarea (float): area of the beam in pixunits^2
-        pixelres (float): pixel resolution of the data in pixunits
-        pixunits (string): string with the spatial units. Accepted values:
+        data (str or array): The name or path+name of the FITS data file, or an array of the data.
+        fluxunits (str): String indicating the flux units.
+        beamarea (float): Area of the beam in pixel units squared.
+        pixelres (float): Pixel resolution of the data in pixel units.
+        pixunits (str): String with the spatial units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
             - deg
-            - armin
+            - arcmin
             - arcsec
-        pbcorr (bool): apply the primary beam correction if True. Note that in that case you must supply a beam cube
-        distance (float): distance of the object in Mpc
-        box (array-like): region to compute the flux as [xmin,xmax,ymin,ymax]
-
+        pbcorr (bool): Apply the primary beam correction if True. Note that in this case, you must supply a beam cube.
+        distance (float): Distance to the object in megaparsecs (Mpc).
+        box (array-like): Region to compute the flux as [xmin, xmax, ymin, ymax].
+    
     Kwargs:
-        beamcube (string/ndarray): name or path+name of the fits beam cube if pbcorr is True
-        path (string): path to the beam cube if the beamcube is a name and not a path+name
-        verbose (bool): option to print messages to terminal if True   
-        
+        beamcube (str or ndarray): The name or path+name of the FITS beam cube if pbcorr is True.
+        path (str): The path to the beam cube if the beamcube is given as a name and not as a path+name.
+        verbose (bool): Option to print messages to the terminal if True.   
+    
     Returns:
-        HI mass over the given array with the uncertainty as float: mass,error = getHImass()
-        
+        tuple: A tuple containing the HI mass over the given array as a float and the corresponding uncertainty.
+    
     Raises:
-        ValueError: If wrong spatial units are provided
-        ValueError: If no spatial resolution and beam area is given when data type is array
-        ValueError: If data are not given as path-to-fits file or as numpy.ndarray
-        ValueError: If no beam information are found
-        ValueError: If no pixel resolution is found
-        ValueError: If no data units are found
-        ValueError: If data units are not km/s or m/s
-        ValueError: If distance is set
-        ValueError: If size of spatial box is not 4
+        ValueError: If incorrect spatial units are provided.
+        ValueError: If no spatial resolution and beam area are given when the data type is an array.
+        ValueError: If data is not provided as a path-to-FITS file or as a NumPy ndarray.
+        ValueError: If no beam information is found.
+        ValueError: If no pixel resolution is found.
+        ValueError: If no data units are found.
+        ValueError: If data units are not in km/s or m/s.
+        ValueError: If the distance is set.
+        ValueError: If the size of the spatial box is not 4.
     """
     #CHECK THE INPUT#
     if 'verbose' in kwargs: #check if the verbose option is in kwargs
-        verbose=kwargs['verbose'] #store the verbose option from the input kwargs
+        verbose=kwargs.get('verbose',False) #store the verbose option from the input kwargs
     else:
         verbose=False #set it to False
     if pixunits not in ['deg','arcmin','arcsec']: #if wrong spatial units are given
@@ -3707,34 +4000,27 @@ def getHImass(data,fluxunits='Jy/beam*m/s',beamarea=None,pixelres=None,pixunits=
     #------------   PB CORRECTION     ------------# 
     if pbcorr: #if the primary beam correction is applied
         #------------   IS IN THE INPUT?     ------------# 
-        if 'beamcube' in kwargs: #if the beamcube is in kwargs
-            if kwargs['beamcube'] == '' or kwargs['beamcube'] is None: #if no beam cube is provided
-                if verbose:
-                    warnings.warn('You have not provided a beam cube. Cannot apply primary beam correction!')
-            else:
-                beamcube=kwargs['beamcube'] #store the data cube path from the input parameters.
+        beamcube=kwargs.get('beamcube',None)
+        if beamcube is None:
+            if verbose:
+                warnings.warn('You have not provided a beam cube. Cannot apply primary beam correction!')
                 #------------   IS IN THE INPUT, BUT THE PATH?     ------------# 
-                if beamcube[0] != '.': #if the primary beam cube name start with a . means that it is a path to the cube (so differs from path parameter)
-                    if 'path' in kwargs: #if the path to the beam cube is in kwargs
-                        if kwargs['path'] == '' or kwargs['path'] is None:
-                            if verbose:
-                                warnings.warn('You have not provided a path to the beam cube. Cannot apply primary beam correction!')
-                        else:
-                            indir=kwargs['path']
-                            beamcube=indir+beamcube
-                            #WE CAN NOW DO THE PB CORRECTION#
-                            with fits.open(beamcube) as pb_cube: #open the primary beam cube
-                                pb_slice=pb_cube[0].data[np.array(pb_cube[0].shape[0]/2).astype(int)] #extract the central plane
-                                darray=darray/pb_slice #apply the pb correction
-                    elif verbose:
-                        warnings.warn('You have not provided a path to the beam cube. Cannot apply primary beam correction!')
-                else:
-                    #WE CAN NOW DO THE PB CORRECTION#
-                    with fits.open(beamcube) as pb_cube: #open the primary beam cube
-                        pb_slice=pb_cube[0].data[np.array(pb_cube[0].shape[0]/2).astype(int)] #extract the central plane
-                        darray=darray/pb_slice #apply the pb correction
-        elif verbose:
-            warnings.warn('You have not provided a beam cube. Cannot apply primary beam correction!')
+        elif beamcube[0] != '.': #if the primary beam cube name start with a . means that it is a path to the cube (so differs from path parameter)
+            path=kwargs.get('path',None)
+            if path == '' or path is None:
+                if verbose:
+                    warnings.warn('You have not provided a path to the beam cube. Cannot apply primary beam correction!')
+            else:
+                beamcube=path+beamcube
+                #WE CAN NOW DO THE PB CORRECTION#
+                with fits.open(beamcube) as pb_cube: #open the primary beam cube
+                    pb_slice=pb_cube[0].data[np.array(pb_cube[0].shape[0]/2).astype(int)] #extract the central plane
+                    darray=darray/pb_slice #apply the pb correction
+        else:
+            #WE CAN NOW DO THE PB CORRECTION#
+            with fits.open(beamcube) as pb_cube: #open the primary beam cube
+                pb_slice=pb_cube[0].data[np.array(pb_cube[0].shape[0]/2).astype(int)] #extract the central plane
+                darray=darray/pb_slice #apply the pb correction
 
     #------------   DISTANCE     ------------#
     if distance is None: #if no pixel resolution is provided
@@ -3758,38 +4044,40 @@ def getHImass(data,fluxunits='Jy/beam*m/s',beamarea=None,pixelres=None,pixunits=
 
 #############################################################################################
 def flux(data,fluxunits='Jy/beam',beamarea=None,pixelres=None,pixunits='deg',spectralres=None,specunits='m/s',box=None,verbose=False):
-    """Calculate the flux of an array.
+    """Calculate the flux over a given region.
 
     Args:
-        data (string/array): name or path+name of the fits data, or array of the data
-        fluxunits (string): string with the flux units
-        beamarea (float): area of the beam in pixunits^2
-        pixelres (float): pixel resolution of the data in pixunits
-        pixunits (string): string with the spatial units. Accepted values:
+        data (str/array): The input data. It can be either the name or path+name of the FITS data file, or an array of the data.
+        fluxunits (str): The units of flux.
+        beamarea (float): The area of the beam in square pixunits.
+        pixelres (float): The pixel resolution of the data in pixunits.
+        pixunits (str): String with the spatial units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
             - deg
-            - armin
+            - arcmin
             - arcsec
-        spectralres (float): data spectral resolution in specunits
-        specunits (string): string with the spectral units. Accepted values:
+        specunits (str): String with the spectral units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
             - km/s
             - m/s
             - Hz
-        box (array-like): region to compute the flux as [xmin,xmax,ymin,ymax]
-        verbose (bool): option to print messages to terminal if True
-        
+        spectralres (float): The spectral resolution of the data in specunits.
+        box (array-like): The region to compute the flux as [xmin, xmax, ymin, ymax].
+        verbose (bool): If True, print messages to the terminal.
+    
     Returns:
-        Flux over the given array
-        
+        The flux over the specified array.
+    
     Raises:
-        ValueError: If wrong spatial units are provided
-        ValueError: If wrong spectral units are provided
-        ValueError: If no spatial resolution, spectral resolution, and beam area is given when data type is array
-        ValueError: If data are not given as path-to-fits file or as numpy.ndarray
-        ValueError: If no beam information are found
-        ValueError: If no pixel resolution is found
-        ValueError: If no data units are found
-        ValueError: If no spectral resolution is found
-        ValueError: If size of spatial box is not 4
+        ValueError: If incorrect spatial units are provided.
+        ValueError: If incorrect spectral units are provided.
+        ValueError: If no spatial resolution, spectral resolution, and beam area are given when the data type is an array.
+        ValueError: If the data is not provided as a path-to-fits file or as a numpy.ndarray.
+        ValueError: If no beam information is found.
+        ValueError: If no pixel resolution is found.
+        ValueError: If no data units are found.
+        ValueError: If no spectral resolution is found.
+        ValueError: If the size of the spatial box is not 4.
     """
     #CHECK THE INPUT#
     if pixunits not in ['deg','arcmin','arcsec']: #if wrong spatial units are given
@@ -3873,180 +4161,185 @@ def create_config(name='default_parameters'):
     """Create a default configuration file.
 
     Args:
-        name (string): name of the configuration filea
+        name (str): name of the configuration file.
         
     Returns:
-        Default configuration file saved as 'name'.par
+        Default configuration file saved as 'name'.par.
         
     Raises:
-        None
+        None.
     """
     with open(name+'.par',mode='w') as configfile: #equivalent of saying configfile=open()
-        configfile.write(";configuration file for nhicci. Use ';' or '#' to comment the parameters you don't need/know\n"
+        configfile.write(";configuration file for nicci. Use ';' or '#' to comment the parameters you don't need/know\n"
             '\n'
             '[GENERAL]\n'
-            'verbose		=	   #if True, all plots and ancillary information will be printed to terminal [True,False] (default: False)\n'
+            'verbose     =      #if True, all plots and ancillary information will be printed to terminal [True,False] (default: False)\n'
             '\n'
             '[INPUT]\n'
-            'path		=	   #path to the working directory (generally where the data are stored). Defatult: current directory\n'
+            'path        =      #path to the working directory (generally where the data are stored). Defatult: current directory\n'
             '\n'
             '[COSMOLOGY]\n'
-            'HO		    =	   #Hubble parameter (default: 69.6)\n'
-            'Omegam	    =	   #Omega matter (default: 0.286)\n'
-            'Omegav	    =	   #Omega vacuum (default: 0.714)\n'
+            'HO          =      #Hubble parameter (default: 69.6)\n'
+            'Omegam      =      #Omega matter (default: 0.286)\n'
+            'Omegav      =      #Omega vacuum (default: 0.714)\n'
             '\n'
             '[GALAXY]\n'
-            'objname		=	   #name of the object (default: None)\n'
-            'distance	=	   #distance of the object in Mpc (default: None)\n'
-            'redshift	=	   #redshift of the object (default: None)\n'
-            'asectokpc	=	   #arcsec to kpc conversion (default: None)\n'
-            'vsys		=	   #systemic velocity of the object in km/s (default: None)\n'
-            'pa			=	   #position angle of the object in deg (default: None)\n'
-            'inc			=	   #inclination angle of the object in deg (default: None)\n'
+            'objname     =      #name of the object (default: None)\n'
+            'distance    =      #distance of the object in Mpc (default: None)\n'
+            'redshift    =      #redshift of the object (default: None)\n'
+            'asectokpc   =      #arcsec to kpc conversion (default: None)\n'
+            'vsys        =      #systemic velocity of the object in km/s (default: None)\n'
+            'pa          =      #position angle of the object in deg (default: None)\n'
+            'inc         =      #inclination angle of the object in deg (default: None)\n'
             '\n'
             '[CUBEPAR]\n'
-            'pixunits	=	   #spatial units (default: None)\n'
-            'specunits	=	   #spectral units (default: None)\n'
-            'fluxunits	=	   #flux units (default: None)\n'
-            'pixelres	=	   #pixel resolution in pixunits (default: None)\n'
-            'spectralres	=	   #spectral resolution in specunits (default: None)\n'
-            'rms         =	   #root-mean-square value in fluxunits (default: None)\n'
+            'pixunits    =      #spatial units (default: None)\n'
+            'specunits   =      #spectral units (default: None)\n'
+            'fluxunits   =      #flux units (default: None)\n'
+            'pixelres    =      #pixel resolution in pixunits (default: None)\n'
+            'spectralres =      #spectral resolution in specunits (default: None)\n'
+            'rms         =      #root-mean-square value in fluxunits (default: None)\n'
             '\n'
             '[BEAM]\n'
-            'bmaj		=	   #beam major axis in arcsec (default: None)\n'
-            'bmin		=	   #beam minor axis in arcsec (default: None)\n'
-            'bpa         =	   #beam position angle in arcsec (default: None)\n'
+            'bmaj        =      #beam major axis in arcsec (default: None)\n'
+            'bmin        =      #beam minor axis in arcsec (default: None)\n'
+            'bpa         =      #beam position angle in arcsec (default: None)\n'
             '\n'
             '[MODE]\n'
-            'mode		=	   #operation mode of the pipeline (default: None)\n'
+            'mode        =      #operation mode of the pipeline (default: None)\n'
             '\n'
             '[CORRECTION]\n'
-            'pbcorr		=	   #apply the primary beam correction [True,False] (default: False)\n'
+            'pbcorr      =      #apply the primary beam correction [True,False] (default: False)\n'
             '\n'
             '[FITS]\n'
-            'datacube	=	   #name of the fits file of the data cube including .fits (default: None)\n'
-            'beamcube	=	   #name of the fits file of the beam cube including .fits (default: None)\n'
-            'maskcube	=	   #name of the fits file of the mask cube including .fits (default: None)\n'
-            'mask2d		=	   #name of the fits file of the 2D mask including .fits (default: None)\n'
-            'channelmap	=	   #name of the fits file of the channel map including .fits (default: None)\n'
-            'modelcube	=	   #name of the fits file of the model cube including .fits (default: None)\n'
-            'mom0map		=	   #name of the fits file of the moment 0 map including .fits (default: None)\n'
-            'mom1map		=	   #name of the fits file of the moment 1 map including .fits (default: None)\n'
-            'mom2map		=	   #name of the fits file of the moment 2 map including .fits (default: None)\n'
+            'datacube    =      #name of the fits file of the data cube including .fits (default: None)\n'
+            'beamcube    =      #name of the fits file of the beam cube including .fits (default: None)\n'
+            'maskcube    =      #name of the fits file of the mask cube including .fits (default: None)\n'
+            'mask2d      =      #name of the fits file of the 2D mask including .fits (default: None)\n'
+            'channelmap  =      #name of the fits file of the channel map including .fits (default: None)\n'
+            'modelcube   =      #name of the fits file of the model cube including .fits (default: None)\n'
+            'mom0map     =      #name of the fits file of the moment 0 map including .fits (default: None)\n'
+            'mom1map     =      #name of the fits file of the moment 1 map including .fits (default: None)\n'
+            'mom2map     =      #name of the fits file of the moment 2 map including .fits (default: None)\n'
             'vfield      =      #name of the fits file of the velocity field including .fits (default: None)\n'
             '\n'
             '[CHANMAP]\n'
-            'chanmin		=	   #starting channel to plot in the channel map (default: 0)\n'
-            'chanmax		=	   #ending channel to plot in the channel map (default: None)\n'
-            'chansep		=	   #channel separation to plot in the channel map (chamin,chanmin+chansep,chanmin+2*chansep,...,chanmax) (default: 1)\n'
+            'chanmin     =      #starting channel to plot in the channel map (default: 0)\n'
+            'chanmax     =      #ending channel to plot in the channel map (default: None)\n'
+            'chansep     =      #channel separation to plot in the channel map (chamin,chanmin+chansep,chanmin+2*chansep,...,chanmax) (default: 1)\n'
             'box         =      #comma-separated pixel edges of the box to extract the channel map in the format [xmin,xmax,ymin,ymax] (default: None)\n'
-            'nsigma		=	   #rms threshold to plot the contours (lowest contours will be nsigma*rms) (default: 3)\n'
-            'usemask		=	   #use a mask in the channel map [True,False] (default: False)\n'
-            'outputdir	=	   #output directory to save the channel map plot. If empty, is the same as [INPUT] path (default: None)\n'
-            'outname		=	   #output name of the channel map plot (including file extension *.jpg,*.png,*.pdf,...) (default: None)\n'
+            'nsigma      =      #rms threshold to plot the contours (lowest contours will be nsigma*rms) (default: 3)\n'
+            'usemask     =      #use a mask in the channel map [True,False] (default: False)\n'
+            'outputdir   =      #output directory to save the channel map plot. If empty, is the same as [INPUT] path (default: None)\n'
+            'outname     =      #output name of the channel map plot (including file extension *.jpg,*.png,*.pdf,...) (default: None)\n'
             '\n'
             '[CUBEDO]\n'
-            'datacube 	=	   #name of the fits file of the data cube including .fits. If empty, is the same of [FITS] datacube (default: None)\n'
-            'operation	=	   #operation to perform on the cube [blank,clip,crop,cut,extend,mirror,mom0,shuffle,toint] (default: None)\n'
-            "chanmin		=	   #first channel for the operations 'blank,cut,mom0' (default: 0)\n"
-            "chanmax		=	   #last channel for the operations 'blank,cut,mom0' (default: None)\n"
+            'datacube    =      #name of the fits file of the data cube including .fits. If empty, is the same of [FITS] datacube (default: None)\n'
+            'operation   =      #operation to perform on the cube [blank,clip,crop,cut,extend,mirror,mom0,shuffle,toint] (default: None)\n'
+            "chanmin     =      #first channel for the operations 'blank,cut,mom0' (default: 0)\n"
+            "chanmax     =      #last channel for the operations 'blank,cut,mom0' (default: None)\n"
             "box         =      #comma-separated pixel edges of the box to extract for operation 'cut' in the format [xmin,xmax,ymin,ymax] (default: None)\n"
-            "addchan		=	   #number of channels to add in operation 'extend'. Negative values add lower channels, positive add higher channels (default: None)\n"
-            "value		=	   #value to assign to blank pixel in operation 'blank' (blank is np.nan) (default: blank)\n"
-            "usemask		=	   #use a 2D mask in the operation 'clip' [True,False] (default: False)\n"
-            'mask		=	   #name of the fits file of the 2D mask including .fits. If empty, is the same of [FITS] mask2d (default: None)\n'
-            "cliplevel	=	   #clip threshold as % of the peak (0.5 is 50%) for operation 'clip' (default: 0.5)\n"
-            "xrot		=	   #x-coordinate of the rotational center for operation 'mirror' (default: None)\n"
-            "yrot		=	   #y-coordinate of the rotational center for operation 'mirror' (default: None)\n"
-            "zrot		=	   #z-coordinate of the rotational center for operation 'mirror' default: None)\n"
-            'outputdir	=	   #output directory to save the new cube. If empty, is the same as [INPUT] path (default: None)\n'
-            'outname		=	   #output name of the new cube including extension .fits. If empty, is the same of datacube (default: None)\n'
+            "addchan     =      #number of channels to add in operation 'extend'. Negative values add lower channels, positive add higher channels (default: None)\n"
+            "value       =      #value to assign to blank pixel in operation 'blank' (blank is np.nan) (default: blank)\n"
+            "usemask     =      #use a 2D mask in the operation 'clip' [True,False] (default: False)\n"
+            'mask        =      #name of the fits file of the 2D mask including .fits. If empty, is the same of [FITS] mask2d (default: None)\n'
+            "cliplevel   =      #clip threshold as % of the peak (0.5 is 50%) for operation 'clip' (default: 0.5)\n"
+            "xrot        =      #x-coordinate of the rotational center for operation 'mirror' (default: None)\n"
+            "yrot        =      #y-coordinate of the rotational center for operation 'mirror' (default: None)\n"
+            "zrot        =      #z-coordinate of the rotational center for operation 'mirror' default: None)\n"
+            'outputdir   =      #output directory to save the new cube. If empty, is the same as [INPUT] path (default: None)\n'
+            'outname     =      #output name of the new cube including extension .fits. If empty, is the same of datacube (default: None)\n'
             '\n'
             '[CUBESTAT]\n'
-            'nsigma		=	   #rms threshold in terms of nsigma*rms for detection limit (default: 3)\n'
-            "statistics     =      #statistic to be used in the noise measurement. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts (default: 'mad')\n"
+            'nsigma      =      #rms threshold in terms of nsigma*rms for detection limit (default: 3)\n'
+            "statistics  =      #statistic to be used in the noise measurement. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts (default: 'mad')\n"
             '\n'
             '[FITSARITH]\n'
-            'fits1		=	   #name of reference fits file including .fits (default: None)\n'
-            'fits2		=	   #name of second fits file including .fits (default: None)\n'
-            'operation	=	   #operation to do between the two fits [sum,sub,mul,div] (default:None)\n'
-            'outputdir	=	   #output directory to save the new cube. If empty, is the same as [INPUT] path (default: None)\n'
-            'outname		=	   #output name of the new fits file including extension .fits. If empty, is the same of fits1 (default: None)\n'
+            'fits1       =      #name of reference fits file including .fits (default: None)\n'
+            'fits2       =      #name of second fits file including .fits (default: None)\n'
+            'operation   =      #operation to do between the two fits [sum,sub,mul,div] (default:None)\n'
+            'outputdir   =      #output directory to save the new cube. If empty, is the same as [INPUT] path (default: None)\n'
+            'outname     =      #output name of the new fits file including extension .fits. If empty, is the same of fits1 (default: None)\n'
             '\n'
             '[FIXMASK]\n'
-            'datacube 	=	   #name of the fits file of the reference data cube including .fits. If empty, is the same of [FITS] datacube (default: None)\n'
-            'maskcube	=	   #name of the fits file of the mask cube including .fits. If empty, is the same of [FITS] maskcube (default: None)\n'
-            'outputdir	=	   #output directory to save the new mask. If empty, is the same as [INPUT] path (default: None)\n'
-            'outname		=	   #output name of the new mask including extension .fits. If empty, is the same of maskcube (default: None)\n'
+            'datacube    =      #name of the fits file of the reference data cube including .fits. If empty, is the same of [FITS] datacube (default: None)\n'
+            'maskcube    =      #name of the fits file of the mask cube including .fits. If empty, is the same of [FITS] maskcube (default: None)\n'
+            'outputdir   =      #output directory to save the new mask. If empty, is the same as [INPUT] path (default: None)\n'
+            'outname     =      #output name of the new mask including extension .fits. If empty, is the same of maskcube (default: None)\n'
             '\n'
             '[GAUSSFIT]\n'
-            'datacube	=	   #name of the fits file of the data cube to fit including .fits. If empty, is the same of [FITS] datacube (default: None)\n'
-            'gaussmask	=	   #name of the fits file of the mask cube including .fits. If empty, is the same of [FITS] maskcube. The fit will be done inside the mask (default: None)\n'
-            'linefwhm	=	   #first guess on the fwhm of the line profile in km/s (default: 15)\n'
-            'amp_thresh	=	   #amplitude threshold for the fit. If a profile peak is < threshold, the fit wont be performed on that spectrum (default: 0)\n'
-            'p_reject	=	   #p-value threshold for fit rejection. If a best-fit as p>p_reject, it will be rejected (default: 1) \n'
-            'clipping	=	   #clip the spectrum to a % of the profile peak [True,False] (default: False)\n'
-            'threshold	=	   #clip threshold as % of the peak (0.5 is 50%) if clipping is True (default: 0.5)\n'
-            'errors		=	   #compute the errors on the best-fit [True,False] (default: False)\n'
-            'write_field	=	   #compute the best-fit velocity field [True,False] (default: False)\n'
-            'outputdir	=	   #output directory to save the model cube. If empty, is the same as [INPUT] path (default: None)\n'
-            'outname		=	   #output name of the model cube including extension .fits (default: None)\n'
+            'datacube    =      #name of the fits file of the data cube to fit including .fits. If empty, is the same of [FITS] datacube (default: None)\n'
+            'gaussmask   =      #name of the fits file of the mask cube including .fits. If empty, is the same of [FITS] maskcube. The fit will be done inside the mask (default: None)\n'
+            'linefwhm    =      #first guess on the fwhm of the line profile in km/s (default: 15)\n'
+            'amp_thresh  =      #amplitude threshold for the fit. If a profile peak is < threshold, the fit wont be performed on that spectrum (default: 0)\n'
+            'p_reject    =      #p-value threshold for fit rejection. If a best-fit as p>p_reject, it will be rejected (default: 1) \n'
+            'clipping    =      #clip the spectrum to a % of the profile peak [True,False] (default: False)\n'
+            'threshold   =      #clip threshold as % of the peak (0.5 is 50%) if clipping is True (default: 0.5)\n'
+            'errors      =      #compute the errors on the best-fit [True,False] (default: False)\n'
+            'write_field =      #compute the best-fit velocity field [True,False] (default: False)\n'
+            'outputdir   =      #output directory to save the model cube. If empty, is the same as [INPUT] path (default: None)\n'
+            'outname     =      #output name of the model cube including extension .fits (default: None)\n'
             '\n'
             '[GETPV]\n'
-            'datacube	=	   #name of the fits file of the data cube including .fits. If empty, is the same of [FITS] datacube (default: None)\n'
-            'width 		=	   #width of the slice in arcsec. If not given, will be the beam size (default: None)\n'
-            'points 		=	   #RA-DEC comma-separated coordinate of the slice points in decimal degree. If two are given ([x,y]), it is assumed they are the center of the slice. Else, they need to be the starting and ending coordinates ([xmin,xmax,ymin,ymax]) (default: None)\n'
-            'angle 		=	   #position angle of the slice in degree. If not given, will be the object position angle (default: None)\n'
-            'chanmin		=	   #starting channel of the slice (default: 0)\n'
-            'chanmax		=	   #ending channel of the slice (default: None)\n'
-            "statistics     =      #statistic to be used in the noise measurement. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts (default: 'mad')\n"
-            'outputdir	=	   #output directory to save the fits and the plot. If empty, is the same as [INPUT] path (default: None)\n'
-            'fitsoutname	=	   #output name of the pv fits file including extension .fits (default: None)\n'
-            'plotoutname	=	   #output name of the pv plot (including file extension *.jpg,*.png,*.pdf,...) (default: None)\n'
-            'subtitle	=	   #optional subtitle for the pv plot (default: None)\n'
-            'nsigma		=	   #rms threshold to plot the contours (lowest contours will be nsigma*rms) (default: 3)\n'
+            'datacube    =      #name of the fits file of the data cube including .fits. If empty, is the same of [FITS] datacube (default: None)\n'
+            'width       =      #width of the slice in arcsec. If not given, will be the beam size (default: None)\n'
+            'points      =      #RA-DEC comma-separated coordinate of the slice points in decimal degree. If two are given ([x,y]), it is assumed they are the center of the slice. Else, they need to be the starting and ending coordinates ([xmin,xmax,ymin,ymax]) (default: None)\n'
+            'angle       =      #position angle of the slice in degree. If not given, will be the object position angle (default: None)\n'
+            'chanmin     =      #starting channel of the slice (default: 0)\n'
+            'chanmax     =      #ending channel of the slice (default: None)\n'
+            "statistics  =      #statistic to be used in the noise measurement. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts (default: 'mad')\n"
+            'outputdir   =      #output directory to save the fits and the plot. If empty, is the same as [INPUT] path (default: None)\n'
+            'fitsoutname =      #output name of the pv fits file including extension .fits (default: None)\n'
+            'plotoutname =      #output name of the pv plot (including file extension *.jpg,*.png,*.pdf,...) (default: None)\n'
+            'subtitle    =      #optional subtitle for the pv plot (default: None)\n'
+            'nsigma      =      #rms threshold to plot the contours (lowest contours will be nsigma*rms) (default: 3)\n'
             '\n'
             '[LINESFINDER]\n'
             'smooth_ker  =      #boxcar kernel size (or list of kernel sizes) to apply. The individual kernel sizes must be odd integer values of 3 or greater and denote the full width of the Boxcar filter used to smooth the spectrum. Set to None or 1 to disable (default: None)\n'
             'threshold   =      #flux threshold to be used by the source finder relative to the measured rms in each smoothing iteration. Values in the range of about 3 to 5 have proven to be useful in most situations, with lower values in that range requiring use of the reliability filter to reduce the number of false detections (default: 3)\n'
-            'replace  =      #before smoothing the spectrum during n source finder iteration, every flux value that was already detected in a previous iteration will be replaced by this value multiplied by the original noise level in the non-smoothed data cube, while keeping the original sign of the data value. This feature can be disabled by specifying a value of < 0. (default: 2)\n'
-            "fluxrange    =      #flux range to be used in the noise measurement of the source finder. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artefacts from affecting the noise measurement. If set to 'full', all pixels will be used in the noise measurement irrespective of their flux (default: 'negative')\n"
-            "statistics     =      #statistic to be used in the noise measurement process of the source finder. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts (default: 'mad')\n"
+            'replace     =      #before smoothing the spectrum during n source finder iteration, every flux value that was already detected in a previous iteration will be replaced by this value multiplied by the original noise level in the non-smoothed data cube, while keeping the original sign of the data value. This feature can be disabled by specifying a value of < 0. (default: 2)\n'
+            "fluxrange   =      #flux range to be used in the noise measurement of the source finder. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artefacts from affecting the noise measurement. If set to anything else, all pixels will be used in the noise measurement irrespective of their flux (default: 'negative')\n"
+            "statistics  =      #statistic to be used in the noise measurement process of the source finder. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts (default: 'mad')\n"
             'link_ker    =      #minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker (default: 3)\n'
+            'separation  =      #maximum channel separation between two sources to be considered a single source (default: 3)\n'
             'rel_thresh  =      #reliability threshold in the range of 0 to 1. Sources with a reliability below this threshold will be discarded (default: 0)\n'
-            'rel_minsnr  =      #lower signal-to-noise limit for reliable sources. Detections that fall below this threshold will be classified as unreliable and discarded. The value denotes the integrated signal-to-noise ratio of the source. Note that the spectral resolution is assumed to be equal to the channel width (default: 3)\n'
+            'rel_snrmin  =      #lower signal-to-noise limit for reliable sources. Detections that fall below this threshold will be classified as unreliable and discarded. The value denotes the integrated signal-to-noise ratio of the source. Note that the spectral resolution is assumed to be equal to the channel width (default: 3)\n'
+            'negative    =      #if set to False, then the detections with negative flux will be discarded at the end of the process (default: True)\n'
+            'gauss_tests =      #if set to True, two statistical tests (Anderson-Darling and Kanekar) will be performed to quantify the gaussianity of the noise in the input spectra (default: False)\n'
+            'p-value     =      #p-value threshold of the Anderson-Darling test to reject non-Gaussian spectra (a spectrum has Gaussian noise if p>p_value) (default: 0.05)\n'  
+            'kanekar     =      #two comma-separated floats representing the minimum and maximum value of the Kanekar test to reject non-Gaussian spectra (a spectrum has Gaussian noise if kanekar_min<test_value<kanekar_max) (default: None)\n'
+            'catalogue   =      #if True, a csv file containing the sources catalogue will be written on the disk (default: False)\n'
             'outputdir   =      #output directory to save the reliability plot file. If empty, is the same as [INPUT] path (default: None)\n'
-            'outname		=	   #output name of the reliability file (including file extension .fits) (default: None)\n'
+            'outname     =      #output name of the reliability file (including file extension .fits) (default: None)\n'
             '\n'
             '[PLOTMOM]\n'
-            'subtitle	=	   #optional subtitle for the plot (default: None)\n'
-            'outputdir	=	   #output directory to save the plot. If empty, is the same as [INPUT] path (default: None)\n'
-            'outname		=	   #output name of the plot (including file extension *.jpg,*.png,*.pdf,...) (default: None)\n'
+            'subtitle    =      #optional subtitle for the plot (default: None)\n'
+            'outputdir   =      #output directory to save the plot. If empty, is the same as [INPUT] path (default: None)\n'
+            'outname     =      #output name of the plot (including file extension *.jpg,*.png,*.pdf,...) (default: None)\n'
             '\n'
             '[REMOVEMOD]\n'
-            'method		=	   #method to remove the model [all,blanking,b+s,negblank,subtraction] (default: subtraction)\n'
-            "threshold	=	   #flux threshold for the 'all,blanking,b+s' methods in units of cube flux (default: 0)\n"
-            'outputdir	=	   #output directory to save the fits file. If empty, is the same as [INPUT] path (default: None)\n'
-            'outname		=	   #output name of the new fits file including extension .fits (default: None)\n'
+            'method      =      #method to remove the model [all,blanking,b+s,negblank,subtraction] (default: subtraction)\n'
+            "threshold   =      #flux threshold for the 'all,blanking,b+s' methods in units of cube flux (default: 0)\n"
+            'outputdir   =      #output directory to save the fits file. If empty, is the same as [INPUT] path (default: None)\n'
+            'outname     =      #output name of the new fits file including extension .fits (default: None)\n'
             '\n'
             '[ROTCURVE]\n'
-            'center		=	   #x-y comma-separated coordinates of the rotational center in pixel (default: None)\n'
+            'center      =      #x-y comma-separated coordinates of the rotational center in pixel (default: None)\n'
             'save_csv    =      #store the output in a csv file [True,False] (default: False)\n'
-            'outputdir	=	   #output directory to save the plot. If empty, is the same as [INPUT] path (default: None)\n'
-            'outname		=	   #output name of the plot (including file extension *.jpg,*.png,*.pdf,...) (default: None)\n'
+            'outputdir   =      #output directory to save the plot. If empty, is the same as [INPUT] path (default: None)\n'
+            'outname     =      #output name of the plot (including file extension *.jpg,*.png,*.pdf,...) (default: None)\n'
             '\n'
             '[STACKING]\n'
             'center      =      #x-y comma-separated coordinates of the rotational center in pixel (default: None)\n'
             'nregions    =      #number of regions from which the spectra are extracted and stacked (default: None)\n'
-            "shape       =      #shape of regions to stack between 'cones' and 'concentric' (default: 'cones')\n"
+            "shape       =      #shape of regions to stack between 'cells', cones' and 'concentric' (default: 'cones')\n"
             'between     =      #comma-separated min and max angle from which the stacking regions are defined. Set to None to disable (default: None)\n'
             'radii       =      #comma-separated min and max radius from the galactic center in pixunits from which the spectra are extracted and stacked (default: None)\n'
             "weighting   =      #type of weight to apply during the stacking between 'None' and 'rms' (default None)\n"
-            'gal_range   =      #velocity range in specunits to exclude from rms calculation in the stacked spectra. Set to 0 to compute the rms over the whole spectrum (Default: 200 km/s)\n'
-            'regrid      =      #regrid the cube option (Default: False)\n'
-            'regrid_size =      #how many pixel to regrid. Set to 0 to regrid to a beam (Deafult: 0)\n'
-            'outputdir   =      #output directory to save the fits file. If empty, is the same as [INPUT] path (default: None)\n'
-            'outname		=	   #output name of the fits file (including file extension .fits) (default: None)\n'
+            "fluxrange   =      #flux range to be used in the noise measurement. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artefacts from affecting the noise measurement. If set to anything else, all pixels will be used in the noise measurement irrespective of their flux (default: 'negative')\n"
+            "statistics  =      #statistic to be used in the noise measurement. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts (default: 'mad')\n"
+            'outputdir   =       #output directory to save the fits file. If empty, is the same as [INPUT] path (default: None)\n'
+            'outname     =      #output name of the fits file (including file extension .fits) (default: None)\n'
             '\n'
             '[VELFI]\n'
             'radii       =      #radii in pixunits at which the rotation velocity is measured (default: None)\n'
@@ -4056,71 +4349,44 @@ def create_config(name='default_parameters'):
             'extend_only =      #extend a given velocity field (True) or write a new one from scratch (False) (default: False)\n'
             'correct     =      #correct the input rotation velocities for the inclination angles (True) or not (False) (default: False)\n'
             'outputdir   =      #output directory to save the fits file. If empty, is the same as [INPUT] path (default: None)\n'
-            'outname		=	   #output name of the fits file (including file extension .fits) (default: None)\n'
+            'outname     =      #output name of the fits file (including file extension .fits) (default: None)\n'
             '\n'
             '[PLOTSTYLE]\n'
-            'ctr width	=	   #width of the contours levels (default: 2)\n'
-            'format	    =	   #file format for the plots (default: pdf)')
+            'ctr width   =      #width of the contours levels (default: 2)\n'
+            'format      =      #file format for the plots (default: pdf)')
 
-#############################################################################################
-############################### Code template for atlas plot ################################   
-# 
-# nrows= #number of rows in the atlas
-# ncols= #number of columns in the atlas
-# outname='<Insert outname here>' #name of the outfile
-# 
-# fig=plt.figure(figsize=(6*ncols,6*nrows))
-# fig.suptitle('<Insert text here>',fontsize=24) #add the title
-# 
-# k=1
-# fig.add_subplot(nrows,ncols,k,projection=)
-# <Insert plotting function here>
-# k+=1
-# fig.add_subplot(nrows,ncols,k,projection=)
-# <Insert plotting function here>
-# k+=1
-# ### Repeat above for how many plot you want ###
-# ### To hide axis labels copy code below ###
-# ax=plt.gca()
-# ax.coords[1].set_ticklabel_visible(False) #disable y-axis labels
-# ax.coords[0].set_ticklabel_visible(False) #disable x-axis labels
-# 
-# fig.subplots_adjust(left=0.07, bottom=0.1, right=0.97, top=0.90, wspace=0.0, hspace=0.0)      
-# fig.savefig(outname,dpi=300,bbox_inches='tight') #save the figure
-# plt.show()
-#
-################################## --- W.I.P. FUNCTIONS --- #################################
-#############################################################################################
-"""#function: showparams
-#input: parameters = python dictionary
-#description: print a python dictionary in a line by line (keyword, value)
-#return: none
-
-def showparams(parameters):
-    for key, value in parameters.items():
-        print(key,' : ',value)
-        
-#############################################################################################
-#function: runsofia
-#input: parameters = keyworded arguments with the necessary variables passed thourgh the parameter dictionary
-        sofiaalias = sofia2 alias name          [] (string)
-        sofiafile  = sofia2 parameter file name [] (string)
-        sofiamode  = sofia2 running mode        [] (string)
-#description: run sofia2 with the given parameter file in a bash shell
-#output: none
-
-def runsofia(sofiaalias,sofiafile):
-    
-    sofiaalias=parameters['sofiaalias'] #store the sofia2 alias name from the input parameters
-    sofiafile=parameters['sofiafile'].split(',') #store the sofia2 parameter file from the input parameters and split if there are more files
-    sofiamode=parameters['sofiamode'] #store the sofia2 running mode from the input parameters
-
-    if mode == 's+c':
-        subprocess.run(["{} {}".format(sofiaalias,sofiafile[0])],shell=True)
-    elif mode == 'moments':
-        subprocess.run(["{} {}".format(sofiaalias,sofiafile[1])],shell=True)
-"""  
 ################################## --- PRIVATE FUNCTIONS --- #################################
+#############################################################################################
+def __assign_to_cells(data,nregions):
+    """Given the length of a cell, divide the spatial dimension of a datacube in a grid of N cells and assign each pixel to a given cell.
+
+    Args:
+        data (ndarray): 3D array with the data
+        nregions (int): number of cells
+        
+    Returns:
+        lists of the x and y coordinate of the pixel in each cell
+        
+    Raises:
+        None
+    """
+    #GET THE NUMBER OF CELLS PER DIMENSION#
+    xstart=np.linspace(0,data.shape[2],round(np.sqrt(nregions))+1) #starting x-coordinate of each cell
+    ystart=np.linspace(0,data.shape[1],round(np.sqrt(nregions))+1) #starting y-coordinate of each cell
+     
+    #DO THE ASSIGNMENT#
+    xvalid=[] #initialize the x-coordinates list of the pixel in the cells
+    yvalid=[] #initialize the y-coordinates list of the pixel in the cells
+    with tqdm(desc='Assigned cells') as pbar:
+        for i in range(len(xstart)-1):
+            for j in range(len(ystart)-1):
+                x,y=np.meshgrid(np.arange(xstart[i],xstart[i+1]),np.arange(ystart[j],ystart[j+1])) #create the coordinate grid of the first cell
+                xvalid.append(x.flatten().astype(int)) #append the x-coordinates
+                yvalid.append(y.flatten().astype(int)) #append the y-coordinates
+                pbar.update(1)
+
+    return xvalid,yvalid
+    
 #############################################################################################
 def __assign_to_concentric(data,nregions,pa,inc,rmin,rmax,angles,x0,y0):
     """Given the parameters of the cones (number of coneas, inner radius, outer radius, x-center, y-center), the pixel resolution and the position angle and inclination of the galaxy, assign each pixel of the data within rmin and rmax into the correct cone.
@@ -4176,13 +4442,13 @@ def __assign_to_concentric(data,nregions,pa,inc,rmin,rmax,angles,x0,y0):
                     #We have to check first that the pixel is in between the selected angles
                     if angles is not None: #if to compute the circles between some angles
                         valid=False #initialize the valid boolean for the check. We run over each cone and stop when the correct cone is found
-                        if (angles[0] > 0 and angles[1] > 0) or (angles[0] < 0 and angles[1] > 0): #if both angles are positive or angle[0] is negative and angle[1] is positive
+                        if (angles[0] >= 0 and angles[1] >= 0) or (angles[0] <= 0 and angles[1] >= 0): #if both angles are positive or angle[0] is negative and angle[1] is positive
                             if angles[0] <= np.arctan2(y,x) <= angles[1]: #the point angle must be in between angle[0] and angle[1]
                                 valid=True
-                        elif angles[0] > 0 and angles[1] < 0: #if angle[0] is positive and angle[1] is negative
+                        elif angles[0] >= 0 and angles[1] <= 0: #if angle[0] is positive and angle[1] is negative
                             if angles[0] <= np.arctan2(y,x) or np.arctan2(y,x) <= angles[1]: #the point angle must be higher than angle[0] but lower than angle[1]
                                 valid=True
-                        elif angles[0] < 0 and angles[1] < 0: #if both angles are negative
+                        elif angles[0] <= 0 and angles[1] <= 0: #if both angles are negative
                             if angles[1] >= np.arctan2(y,x) >= angles[0]: #the point angle must be in between angle[1] and angle[0]
                                 valid=True
                     else:
@@ -4199,14 +4465,9 @@ def __assign_to_concentric(data,nregions,pa,inc,rmin,rmax,angles,x0,y0):
                                     xvalid[i-1].append(k) #append the x-coordinate
                                     yvalid[i-1].append(j) #append the y-coordinate
                                     pbar.update(1)
-####################################################### HERE WE ADD A FAKE LINE #####################################
-                                    # if i==19:
-                                    #     g=models.Gaussian1D(amplitude=2.2E-05,mean=357,stddev=7)
-                                    #     v=np.arange(0,715)
-                                    #     data[:,j,k]+=g(v)
                                     break
                                 
-    return xvalid,yvalid#,data #uncomment if you add the fake line
+    return xvalid,yvalid
           
 #############################################################################################
 def __assign_to_cones(data,nregions,pa,inc,rmin,rmax,x0,y0):
@@ -4289,22 +4550,48 @@ def __assign_to_cones(data,nregions,pa,inc,rmin,rmax,x0,y0):
                                 pbar.update(1)
                                 break
     return xvalid,yvalid
-    
+
+#############################################################################################
+def __auto_fit_fontsize(text,width,height,fig=None,ax=None):
+    """Auto-fit the fontsize of a text object to a specified box-size.
+
+    Args:
+        text (matplotlib.text.Text): text to resize
+        width (float): allowed width in data coordinates
+        height (float): allowed height in data coordinates
+    """
+    fig=fig or plt.gcf()
+    ax=ax or plt.gca()
+
+    #get text bounding box in figure coordinates
+    renderer=fig.canvas.get_renderer()
+    bbox_text=text.get_window_extent(renderer=renderer)
+
+    #transform bounding box to data coordinates
+    bbox_text=Bbox(ax.transData.inverted().transform(bbox_text))
+
+    #evaluate fit and recursively decrease fontsize until text fits
+    fits_width= bbox_text.width < width if width else True
+    fits_height=bbox_text.height < height if height else True
+    if not all((fits_width, fits_height)):
+        text.set_fontsize(text.get_fontsize()-1)
+        __auto_fit_fontsize(text,width,height,fig,ax)
+            
 ############################################################################################# 
-def __get_reliability(pos_cat,neg_cat,snrmin,rel_threshold,**kwargs):
+def __get_reliability(pos_sources,neg_sources,snrmin,threshold,**kwargs):
     """Calculate the reliability of the positive sources in a catalogue, by comparing their density in each position of the parameter space with the density of negative sources in the same position. All the fluxes must be divided by the rms of the data prior calling this function.
 
     Args:
-        pos_cat (array-like): array-like of array where each array contains the flux per channel of a positive source
-        neg_cat (array-like): array-like of array where each array contains the flux per channel of a negative source
-        rel_snrmin (float): lower signal-to-noise limit for reliable sources. Detections that fall below this threshold will be classified as unreliable and discarded. The value denotes the integrated signal-to-noise ratio, SNR = Fsum/(RMS√N), of the source, where N is the number of channels of the source, Fsum is the summed flux density and RMS is the local RMS noise level (assumed to be constant). Note that the spectral resolution is assumed to be equal to the channel width.
-        rel_threshold (float): reliability threshold in the range of 0 to 1. Sources with a reliability below this threshold will be discarded.
+        pos_sources (array-like): array-like of array where each array contains the flux per channel of a positive source
+        neg_sources (array-like): array-like of array where each array contains the flux per channel of a negative source
+        snrmin (float): lower signal-to-noise limit for reliable sources. Detections that fall below this threshold will be classified as unreliable and discarded. The value denotes the integrated signal-to-noise ratio, SNR = Fsum/(RMS√N), of the source, where N is the number of channels of the source, Fsum is the summed flux density and RMS is the local RMS noise level (assumed to be constant). Note that the spectral resolution is assumed to be equal to the channel width.
+        threshold (float): reliability threshold in the range of 0 to 1. Sources with a reliability below this threshold will be discarded.
         
     Kwargs:
-        objname (string): name of the object (Default: '')
-        outdir (string): output folder to save the plots
-        outname (string): output file name
-        plot_format (string): file format of the plots
+        objname (str): name of the object (Default: '')
+        outdir (str): output folder to save the plots
+        outname (str): output file name
+        plot_format (str): file format of the plots
         ctr_width (float): line width of the contours (Default: 2)
         verbose (bool): option to print messages and plot to terminal if True 
         
@@ -4315,26 +4602,26 @@ def __get_reliability(pos_cat,neg_cat,snrmin,rel_threshold,**kwargs):
         None
     """   
     #CHECK THE KWARGS#
-    verbose=kwargs['verbose'] if 'verbose' in kwargs else False
-    objname=kwargs['objname'] if 'objname' in kwargs else None
-    outdir=kwargs['outdir'] if 'outdir' in kwargs else os.getcwd()+'/'
-    outname=kwargs['outname'] if 'outname' in kwargs else 'reliability_result'
+    verbose=kwargs.get('verbose',False)
+    objname=kwargs.get('objname',None)
+    outdir=kwargs.get('outdir',os.getcwd()+'/')
+    outname=kwargs.get('outname','reliability_result')
     if objname is None or objname == '':
         outname=outdir+outname
     else:
         outname=outdir+objname+'_'+outname
-    format=kwargs['plot_format'] if 'plot_format' in kwargs else 'pdf'
-    ctr_width=kwargs['ctr_width'] if 'ctr_width' in kwargs else 2
+    plot_format=kwargs.get('plot_format','.pdf')
+    ctr_width=kwargs.get('ctr_width',2)
     
     #CALCULATE THE PARAMETERS FOR RELIABILITY CALCULATION
     #.ravel() transform the array into a 1D. The shape is (N,) and not (N,1) where N is the number of sources
-    pos_peak=np.log10(np.nanmax(pos_cat,axis=1).reshape(pos_cat.shape[0],1)).ravel() #calculate log10(peak/rms) for positive sources
-    pos_sum=np.log10(np.nansum(pos_cat,axis=1).reshape(pos_cat.shape[0],1)).ravel() #calculate log10(sum/rms) for positive sources
-    pos_mean=np.log10(np.nanmean(pos_cat,axis=1).reshape(pos_cat.shape[0],1)).ravel() #calculate log10(mean/rms) for positive sources
+    pos_peak=np.log10(np.abs(np.nanmax(pos_sources,axis=1)).reshape(pos_sources.shape[0],1)).ravel() #calculate log10(peak/rms) for positive sources
+    pos_sum=np.log10(np.abs(np.nansum(pos_sources,axis=1)).reshape(pos_sources.shape[0],1)).ravel() #calculate log10(sum/rms) for positive sources
+    pos_mean=np.log10(np.abs(np.nanmean(pos_sources,axis=1)).reshape(pos_sources.shape[0],1)).ravel() #calculate log10(mean/rms) for positive sources
 
-    neg_peak=np.log10(np.nanmax(np.abs(neg_cat),axis=1).reshape(neg_cat.shape[0],1)).ravel() #calculate log10(peak/rms) for negative sources
-    neg_sum=np.log10(np.nansum(np.abs(neg_cat),axis=1).reshape(neg_cat.shape[0],1)).ravel() #calculate log10(sum/rms) for negative sources
-    neg_mean=np.log10(np.nanmean(np.abs(neg_cat),axis=1).reshape(neg_cat.shape[0],1)).ravel() #calculate log10(mean/rms) for negative sources
+    neg_peak=np.log10(np.abs(np.nanmax(neg_sources,axis=1)).reshape(neg_sources.shape[0],1)).ravel() #calculate log10(peak/rms) for negative sources
+    neg_sum=np.log10(np.abs(np.nansum(neg_sources,axis=1)).reshape(neg_sources.shape[0],1)).ravel() #calculate log10(sum/rms) for negative sources
+    neg_mean=np.log10(np.abs(np.nanmean(neg_sources,axis=1)).reshape(neg_sources.shape[0],1)).ravel() #calculate log10(mean/rms) for negative sources
 
     #PREPARE THE DATA FOR KDE ESTIMATION
     tot_peak=np.concatenate((pos_peak,neg_peak)) #concatenate log10(peak/rms) of positive and negative into a single array
@@ -4349,6 +4636,11 @@ def __get_reliability(pos_cat,neg_cat,snrmin,rel_threshold,**kwargs):
     ncols=3 #number of columns in the figure        
     fig=plt.figure(figsize=(6*ncols,6*nrows)) #create the figure
     ax=[] #initialize the plot list
+    
+    #CALCULATE THE DENSITY OF POSITIVE AND NEGATIVE SOURCES IN THE PARAMETER SPACE
+    #This is LinkerPar_reliability of SoFiA2 until reliability calculation (line 1132 of LinkerPar.c of Sofia v2.5.1)
+    pos_pdf=[] #initialize the list of positive sources probability density function. Each element of the least is the pdf of the positive sources in a parameter space
+    neg_pdf=[] #initialize the list of negative sources probability density function. Each element of the least is the pdf of the negative sources in a parameter space
     for i in range(len(rel_params)): #run over the dimensions of the parameter space
         #we must select the correct 2D space from the 3D parameter space at each iteration
         if i==0: #peak vs sum
@@ -4363,33 +4655,17 @@ def __get_reliability(pos_cat,neg_cat,snrmin,rel_threshold,**kwargs):
         neg_m=np.vstack([neg_rel_params[idx1],neg_rel_params[idx2]]) #create the matrix where each row is the measurment on the negative sources of the idx-parameter (e.g., the peak flux density)
         pos_m=np.vstack([pos_rel_params[idx1],pos_rel_params[idx2]]) #create the matrix where each row is the measurment on the positive sources of the idx-parameter (e.g., the peak flux density)
         
-        #CALCULATE THE DENSITY OF POSITIVE AND NEGATIVE SOURCES IN THE PARAMETER SPACE
-        #This is LinkerPar_reliability of SoFiA2 until reliability calculation (line 1132 of LinkerPar.c of Sofia v2.5.1)
+        
         X,Y=np.meshgrid(np.sort(rel_params[idx1]),np.sort(rel_params[idx2])) #create the x,y grid coordinates with the values of the variables. np.sort() is needed to create a monotonichally increasing coordinates
         points=np.vstack([X.ravel(),Y.ravel()]) #create the points matrix. If dim is the number of variables, and N the number of observations, this matrix has dimensions (dim,N**2)
         neg_kernel=kde(neg_m) #calculate the gaussian kernel density estimation of the negative sources. neg_kernel.covariance gives the covariance matrix for negative sources. neg_kernel.factor gives the scale kernel factor for kde estimation matrix for negative sources. neg_kernel.inv_cov gives the inverse covariance matrix for negative sources
         neg_kernel.factor=0.4 #set the kernel scale factor to a standard value (for SoFiA2)
+        neg_pdf.append(neg_kernel) #append the result of the kde to the negative pdf list
         neg_density=np.reshape(neg_kernel(points).T,X.shape) #evaluate the kde on the points and return a (N,N) matrix with the value of the negative kde for each position in the parameter space
         pos_kernel=kde(pos_m) #calculate the gaussian kernel density estimation of the positive sources
         pos_kernel.factor=0.4 #set the kernel scale factor to a standard value (for SoFiA2)
+        pos_pdf.append(pos_kernel) #append the result of the kde to the positive pdf list
         pos_density=np.reshape(pos_kernel(points).T,X.shape) #evaluate the kde on the points and return a (N,N) matrix with the value of the positive kde for each position in the parameter space
-        
-        #CALCULATE THE RELIABILITY OF THE POSITIVE SOURCES
-        #This is LinkerPar_reliability of SoFiA2 reliability calculation (after line 1132 of LinkerPar.c of Sofia v2.5.1)
-        rel=[] #initialize the reliability list
-        for k in range(len(pos_cat)): #run over the list of positive sources
-            n=len(np.where(~np.isnan(pos_cat[[k]]))[0]) #number of channels contributing to a source
-            SNR=np.nansum(pos_cat[k])/np.sqrt(n) #SNR of the source
-            if SNR>snrmin: #if the SNR is above the chosen minimum
-                P=pos_kernel.evaluate((pos_rel_params[idx1][k],pos_rel_params[idx2][k])) #density of positive sources at the position of the k-positive source
-                N=neg_kernel.evaluate((pos_rel_params[idx1][k],pos_rel_params[idx2][k])) #density of negative sources at the position of the k-positive source
-                if P > N: #if the positive density is higher than the negative density
-                    rel.append((P-N)/P) #calculate the reliability
-                else:
-                    rel.append(np.array([0])) #set to 0 the reliability
-            else:
-                rel.append(np.array([0])) #set to 0 the reliability
-        rel=np.array(rel).ravel() #convert the reliability list into an array
 
         ax.append(fig.add_subplot(nrows,ncols,i+1)) #create the plot for the result of the iteration
         ax[i].contour(X,Y,neg_density,colors='red',linestyles='--',linewidths=ctr_width/2) #plot the contours of the negative density
@@ -4423,15 +4699,38 @@ def __get_reliability(pos_cat,neg_cat,snrmin,rel_threshold,**kwargs):
             ax[i].set_ylabel('log(mean/rms)')
             ax[i].text(0.95,0.05,'SNR min = {}'.format(snrmin),ha='right',transform=ax[i].transAxes)
 
-        #UPDATE THE RELIABILITY ARRAY
-        if i==0: #if we are at the first iteration
-            total_rel=rel #the total reliability array is the reliability array
+    #CALCULATE THE RELIABILITY OF THE POSITIVE SOURCES
+    #This is LinkerPar_reliability of SoFiA2 reliability calculation (after line 1132 of LinkerPar.c of Sofia v2.5.1)
+    rel=[] #initialize the reliability list. The k-element of the list is the reliability evaluation of the source k in the current parameter space. 
+    for k in range(len(pos_sources)): #run over the list of positive sources
+        n=len(np.where(~np.isnan(pos_sources[k]))[0]) #number of channels contributing to a source
+        SNR=np.nansum(pos_sources[k])/np.sqrt(n) #SNR of the source
+        if SNR>snrmin: #if the SNR is above the chosen minimum
+            P=0 #initialized the total positive pdf
+            N=0 #initialized the total negative pdf
+            for i in range(len(rel_params)): #run over the dimensions of the parameter space
+                #we must select the correct 2D space from the 3D parameter space at each iteration
+                if i==0: #peak vs sum
+                    idx1=0 #index of the peak list in the parameter space
+                    idx2=1 #index of the sum list in the parameter space
+                elif i==1: #peak vs mean
+                    idx1=0 #index of the peak list in the parameter space
+                    idx2=2 #index of the mean list in the parameter space
+                else: #sum vs mean
+                    idx1=1 #index of the sum list in the parameter space
+                    idx2=2 #index of the mean list in the parameter space
+                P+=pos_pdf[i].evaluate((pos_rel_params[idx1][k],pos_rel_params[idx2][k])) #density of positive sources at the position of the k-positive source
+                N+=neg_pdf[i].evaluate((pos_rel_params[idx1][k],pos_rel_params[idx2][k])) #density of negative sources at the position of the k-positive source
+            if P > N: #if the total positive pdf is greater than the total negative pdf
+                rel.append((P-N)/P) #calculate the reliability
+            else:
+                rel.append(np.array([0])) #set to 0 the reliability. Use np.array([0]) because the outcome of pdf.evaluate is a np.array, hence, it is preferable to have the same type of objects in the list to do a proper convertion to a np.array further down
         else:
-            total_rel=np.add(total_rel,rel) #sum the reliability to the total values
-
-    rel_x=pos_peak[total_rel>=rel_threshold] #filter the reliable sources in the peak space
-    rel_y=pos_sum[total_rel>=rel_threshold] #filter the reliable sources in the sum space
-    rel_z=pos_mean[total_rel>=rel_threshold] #filter the reliable sources in the mean space
+            rel.append(np.array([0])) #set to 0 the reliability. Use np.array([0]) because the outcome of pdf.evaluate is a np.array, hence, it is preferable to have the same type of objects in the list to do a proper convertion to a np.array further down
+    rel=np.array(rel).ravel() #convert the reliability list into an array. ravel() is needed to convert the list of arrays into a 1D array
+    rel_x=pos_peak[rel>=threshold] #filter the reliable sources in the peak space
+    rel_y=pos_sum[rel>=threshold] #filter the reliable sources in the sum space
+    rel_z=pos_mean[rel>=threshold] #filter the reliable sources in the mean space
 
     for i in range(len(rel_params)): #update the scatter plots with the highlight of the reliable sources
         if i==0:
@@ -4455,14 +4754,14 @@ def __get_reliability(pos_cat,neg_cat,snrmin,rel_threshold,**kwargs):
     ax.legend(loc='upper right',prop={'size':11})
     
     fig.subplots_adjust(wspace=0.4,hspace=0.3)
-    fig.savefig(outname+'.'+format,dpi=300,bbox_inches='tight')
+    fig.savefig(outname+plot_format,dpi=300,bbox_inches='tight')
     
     if verbose:
         plt.show()
     else:
         plt.close()
     
-    return total_rel
+    return rel
 
 ############################################################################################# 
 def __get_rms(data,mode):
@@ -4470,7 +4769,7 @@ def __get_rms(data,mode):
 
     Args:
         data (array): 1D array with the data
-        mode (string): type of algorithm to use for rms calculation ('std' or 'mad').
+        mode (str): type of algorithm to use for rms calculation ('std' or 'mad').
         
     Kwargs:
         None
@@ -4481,15 +4780,17 @@ def __get_rms(data,mode):
     Raises:
         None
     """   
+    mad_to_std=1.48 #conversion between mad and std (std=1.48*mad) 
+    
     if mode=='std':
-        rms=np.sqrt(np.nanmean(data**2))
+        rms=np.sqrt(np.nanmean(data**2)) #the rms is the same of the standard deviation, if and only if, the mean of the data is 0, i.e., the data are following a Gaussian distribution
     elif mode=='mad':
-        rms=np.nanmedian(np.abs(data-np.nanmedian(data)))
+        rms=np.nanmedian(np.abs(data-np.nanmedian(data)))*mad_to_std
     
     return rms
-        
+
 ############################################################################################# 
-def __get_sources_catalogue(data,sources_id):
+def __get_sources_type(data,sources_id):
     """Given an array of data and an array of sources ID, returns two list of arrays: one with fluxes of all the positive sources and one of all the negative sources in the data. The length of each source is equal and uniformed by appending nans.
 
     Args:
@@ -4518,30 +4819,30 @@ def __get_sources_catalogue(data,sources_id):
                 pos_max_length=len(sources_id[sources_id==i]) #recalculate the max number of channels in a positive source
 
     #CREATE THE POSITIVE AND NEGATIVE SOURCE CATALOGUES#
-    pos_cat=[] #initialize the positive sources catalogue
-    neg_cat=[] #initialize the negative sources catalogue
+    pos_sources=[] #initialize the positive sources catalogue
+    neg_sources=[] #initialize the negative sources catalogue
     for i in range(int(np.nanmin(sources_id)),int(np.nanmax(sources_id))+1): #run over the source indexes
         if i<0: #if negative sources
             source=data[sources_id==i] #store the source spectral flux
             while len(source)<neg_max_length: #add nans until the source spectral length match the widest source
                 source=np.append(source,np.nan)
-            neg_cat.append(source) #add it to the negative sources list
+            neg_sources.append(source) #add it to the negative sources list
         elif i>0: #if positive sources
             source=data[sources_id==i] #store the source spectral flux
             while len(source)<pos_max_length: #add nans until the source spectral length match the widest source
                 source=np.append(source,np.nan)
-            pos_cat.append(source) #add it to the positive sources list
-    pos_cat=np.array(pos_cat) #convert the list into an array
-    neg_cat=np.array(neg_cat) #convert the list into an array 
+            pos_sources.append(source) #add it to the positive sources list
+    pos_sources=np.array(pos_sources) #convert the list into an array
+    neg_sources=np.array(neg_sources) #convert the list into an array 
     
-    return pos_cat,neg_cat
-       
+    return pos_sources,neg_sources
+           
 #############################################################################################
 def __load(data_to_load):
     """Load data provided in various type and return them as numpy.ndarray. If the data are fits, it returns also the header as astropy.fits.io.header object.
 
     Args:
-        data_to_load (string/PrimaryHUD/HUDlist-like): name or path+name of the fits file, or PrimaryHUD or HUDList or array-like variable of the data
+        data_to_load (str/PrimaryHUD/HUDlist-like): name or path+name of the fits file, or PrimaryHUD or HUDList or array-like variable of the data
         
     Returns:
         data as numpy.ndarray
@@ -4643,11 +4944,11 @@ def __read_string(string,object,**kwargs):
     """Read the string of a file name or of a path to the file and build the variable to be used by the other functions.
 
     Args:
-        string (string): file name or of a path to the file
-        object (string): which object (datacube, maskcube, ...) is the string referring to
+        string (str): file name or of a path to the file
+        object (str): which object (datacube, maskcube, ...) is the string referring to
     
     Kwargs:
-        path (string): (optional) path to the file. Used if 'string' is not a path to the file
+        path (str): (optional) path to the file. Used if 'string' is not a path to the file
         
     Returns:
         string with the path and the file name
@@ -4664,13 +4965,12 @@ def __read_string(string,object,**kwargs):
         else:
             raise ValueError('ERROR: {} is not set: aborting!'.format(object))
     if string[0] != '.': #if the string start with a . means that it is a path to the files (so differs from path parameter)
-        if 'path' in kwargs: #if the path to the file is in kwargs
-            if kwargs['path'] == '' or kwargs['path'] is None:
-                raise ValueError('ERROR: no path to the {} is set: aborting!'.format(object))
-            else:
-                string=kwargs['path']+string
-        else:
+        path=kwargs.get('path',None)
+        if path == '' or path is None:
             raise ValueError('ERROR: no path to the {} is set: aborting!'.format(object))
+        else:
+            string=path+string
+            
     return string
     
 #############################################################################################
@@ -4726,7 +5026,7 @@ def __plot_kpcline(pixelres,asectokpc,xlim,leftmargin,topmargin):
     return ax
     
 #############################################################################################
-def __plot_stack_result(v,spectrum,rms,expected_rms,smooth_rms,fluxunits,mask=None,aligned=False,chmin=None,chmax=None,nrows=1,ncols=2,color='blue',ylim=None,idx=1,smooth_kernel=None,sc_threshold=None,link_kernel=None,**converttoHI_kwargs):
+def __plot_stack_result(v,spectrum,rms,expected_rms,smooth_rms,fluxunits,mask=None,aligned=False,nrows=1,ncols=2,color='blue',ylim=None,idx=1,smooth_kernel=None,sc_threshold=None,link_kernel=None,**converttoHI_kwargs):
     """Plot the stacked spectrum and the rms as a function of the number of stacked spectra.
 
     Args:
@@ -4735,15 +5035,13 @@ def __plot_stack_result(v,spectrum,rms,expected_rms,smooth_rms,fluxunits,mask=No
         rms (array-like): rms value after each stacking iteration
         expected_rms (array-like): expected rms after each stacking iteration
         smooth_rms (float): rms value after the last smoothing iteration. Set it to None if no smoothing is applied
-        fluxunits (string): flux units of the spectrum
+        fluxunits (str): flux units of the spectrum
         mask (array-like): optional mask. Set to None to disable
-        aligned (boolean): tells if the spectrum is aligned (True) or not w.r.t. the redshift
-        chmin (int): show the minimum channel to ignore in the rms calculation
-        chmax (int): show the maximum channel to ignore in the rms calculation
-        beamarea (float): area of the beam in pixunits^2
+        aligned (bool): tells if the spectrum is aligned (True) or not w.r.t. the redshift
+        pixelres (float): pixel resolution of the data
         nrows (int): number of rows in the plot
         ncols (int): number of cols in the plot
-        color (string): color of the spectrum and rms lines
+        color (str): color of the spectrum and rms lines
         ylim (array-like): (optional) y-axis limits
         idx (int): index of the plot (idx <= nrows*ncols)
         smooth_kernel (int/list of int): boxcar kernel size (or list of kernel sizes) to apply. The individual kernel sizes must be odd integer values of 3 or greater and denote the full width of the Boxcar filter used to smooth the spectrum. Set to None or 1 to disable.
@@ -4751,17 +5049,20 @@ def __plot_stack_result(v,spectrum,rms,expected_rms,smooth_rms,fluxunits,mask=No
         link_kernel (int): minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker.
         
     Kwargs:
-        fluxunits (string): string with the flux units
+        fluxunits (str): string with the flux units
         beamarea (float): area of the beam in pixunits^2
-        pixunits (string): string with the spatial units. Accepted values:
+        pixelres (float): pixel resolution of the data
+        pixunits (str): String with the spatial units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
             - deg
-            - armin
+            - arcmin
             - arcsec
-        spectralres (float): data spectral resolution in specunits
-        specunits (string): string with the spectral units. Accepted values:
+        specunits (str): String with the spectral units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
             - km/s
             - m/s
             - Hz
+        spectralres (float): data spectral resolution in specunits
             
     Returns:
         Plot of the stacked spectrum, the measured and the expected rms as matplotlib.pyplot.figure.
@@ -4775,35 +5076,26 @@ def __plot_stack_result(v,spectrum,rms,expected_rms,smooth_rms,fluxunits,mask=No
     ax=fig.add_subplot(nrows,ncols,idx) #create the subplot for the spectrum
     if idx==1: #if the plot is in the first row
         ax.set_title('Spectrum',fontsize=20,pad=10)
-    ax=__plot_stack_spectrum(v,spectrum,mask,color,aligned,chmin,chmax,rms[-1],smooth_rms,fluxunits,smooth_kernel)
+    ax=__plot_stack_spectrum(v,spectrum,mask,color,aligned,rms[-1],smooth_rms,fluxunits,smooth_kernel)
     if ylim is not None:
         ax.set_ylim(ylim)
-
-    # if idx>1: #if idx is more than 1 means we are plotting multiple stacking results and we want to uniform the ymin and ymax to compare the spectra
-    #     axes=plt.gcf().get_axes() #get the axes in the figure
-    #     ylim_list=[] #initialize the ylim list
-    #     for i in np.arange(0,idx,2): #access the axes corresponding to the spectrum
-    #         ylim_list.append(np.array(axes[i].get_ylim())) #store the y axis limits
-    #     ylim_array=np.array(ylim_list) #convert the list into an array
-    #     ylim=[np.nanmin(ylim_array),np.nanmax(ylim_array)] #calculate the ney ylim
-    #     for i in np.arange(0,idx,2): #access the axes corresponding to the spectrum
-    #         axes[i].set_ylim(ylim) #set the ylim
             
     ax=fig.add_subplot(nrows,ncols,idx+1) #create the subplot for the rms
     if idx==1: #if the plot is in the first row
         ax.set_title('RMS',fontsize=20,pad=10)
-    beamarea=converttoHI_kwargs['beamarea']
+    ## The new beamarea is the regionarea/beamarea
+    regionarea=converttoHI_kwargs['pixelres']**2*N #the region area is the number of pixel in the area (which is the number of stacked spectra) multiplited by the pixel resolution squared
+    ##
+    beamarea=regionarea/converttoHI_kwargs['beamarea']
     pixunits=converttoHI_kwargs['pixunits']
     spectralres=converttoHI_kwargs['spectralres']
     specunits=converttoHI_kwargs['specunits']
-    rms=converttoHI(rms,fluxunits=fluxunits,beamarea=beamarea,pixunits=pixunits,spectralres=spectralres,specunits=specunits)
-    expected_rms=converttoHI(expected_rms,fluxunits=fluxunits,beamarea=beamarea,pixunits=pixunits,spectralres=spectralres,specunits=specunits)
+    rms=converttoHI(rms,fluxunits=fluxunits,beamarea=regionarea,pixunits=pixunits,spectralres=spectralres,specunits=specunits)
+    expected_rms=converttoHI(expected_rms,fluxunits=fluxunits,beamarea=regionarea,pixunits=pixunits,spectralres=spectralres,specunits=specunits)
     ax.plot(np.arange(1,N+1),rms,linewidth=2,color=color,label='Measured rms') #plot the stacked rms
     ax.plot(np.arange(1,N+1),expected_rms,linewidth=2,color='gray',linestyle='--',label='Expected rms') #plot the expected rms
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.tick_params(which='both',direction='in',length=10,width=1) #change the ticks of the axes from external to internal, as well as the length and the width
-    ax.tick_params(which='minor',length=5) #make the minor ticks slightly shorter
     ax.set_xlabel('Number of stacked spectra') #set the x-axis label
     ax.set_ylabel('RMS [cm$^{-2}$]') #set the y-axis label
     ax.set_xlim(1,N) #set the xlim
@@ -4816,20 +5108,18 @@ def __plot_stack_result(v,spectrum,rms,expected_rms,smooth_rms,fluxunits,mask=No
     return fig
 
 #############################################################################################   
-def __plot_stack_spectrum(v,spectrum,mask,color,aligned,chmin,chmax,rms,smooth_rms,fluxunits,smooth_kernel=None):
+def __plot_stack_spectrum(v,spectrum,mask,color,aligned,rms,smooth_rms,fluxunits,smooth_kernel=None):
     """Plot the stacked spectrum in the current matplotlib.pyplot.axis.
 
     Args:
         v (array-like): spectral axis
         spectrum (array-like): stacked spectrum
         mask (array-like): optional mask. Set to None to disable
-        color (string): color of the spectrum
-        aligned (boolean): tells if the spectrum is aligned (True) or not w.r.t. the redshift
-        chmin (int): show the minimum channel to ignore in the rms calculation
-        chmax (int): show the maximum channel to ignore in the rms calculation
+        color (str): color of the spectrum
+        aligned (bool): tells if the spectrum is aligned (True) or not w.r.t. the redshift
         rms (array-like): rms value to plot
         smooth_rms (float): rms value after the last smoothing iteration. Set it to None if no smoothing is applied
-        fluxunits (string): flux units of the spectrum
+        fluxunits (str): flux units of the spectrum
         smooth_kernel (int/list of int): boxcar kernel size (or list of kernel sizes) to apply. The individual kernel sizes must be odd integer values of 3 or greater and denote the full width of the Boxcar filter used to smooth the spectrum. Set to None or 1 to disable.
         
     Returns:
@@ -4851,27 +5141,24 @@ def __plot_stack_spectrum(v,spectrum,mask,color,aligned,chmin,chmax,rms,smooth_r
                 if i==len(smooth_kernel)-1: #if we are plotting the last kernel we add the legend labels
                     ax.plot(v,conv.convolve(spectrum,conv.Box1DKernel(smooth_kernel[i])),color=color,linewidth=lw[i],linestyle='dotted',alpha=alpha[i+1],label='Noise',zorder=100) #plot the smoothed stacked spectrum
                     if ~np.all(np.isnan(mask)): #if a source is in the spectrum
-                        ax.plot(v[chmin:chmax],conv.convolve(spectrum,conv.Box1DKernel(smooth_kernel[i]))[chmin:chmax]*mask[chmin:chmax],color=color,linewidth=lw[i],alpha=alpha[i+1],label='Source',zorder=100) #plot the source smoothed stacked spectrum in the channel range covered by the galaxy emission
+                        ax.plot(v,conv.convolve(spectrum,conv.Box1DKernel(smooth_kernel[i]))*mask,color=color,linewidth=lw[i],alpha=alpha[i+1],label='Source',zorder=100) #plot the source smoothed stacked spectrum in the channel range covered by the galaxy emission
                 else:
                     ax.plot(v,conv.convolve(spectrum,conv.Box1DKernel(smooth_kernel[i])),color=color,linewidth=lw[i],linestyle='dotted',alpha=alpha[i+1],zorder=100) #plot the smoothed stacked spectrum
                     if ~np.all(np.isnan(mask)): #if a source is in the spectrum
-                        ax.plot(v[chmin:chmax],conv.convolve(spectrum,conv.Box1DKernel(smooth_kernel[i]))[chmin:chmax]*mask[chmin:chmax],color=color,linewidth=lw[i],alpha=alpha[i+1],zorder=100) #plot the masked smoothed stacked spectrum in the channel range covered by the galaxy emission
+                        ax.plot(v,conv.convolve(spectrum,conv.Box1DKernel(smooth_kernel[i]))*mask,color=color,linewidth=lw[i],alpha=alpha[i+1],zorder=100) #plot the masked smoothed stacked spectrum in the channel range covered by the galaxy emission
         else:
             ax.plot(v,spectrum,color=color,linewidth=2,linestyle='dotted',label='Noise',zorder=100) #plot the full spectrum
             if ~np.all(np.isnan(mask)): #if a source is in the spectrum
-                ax.plot(v[chmin:chmax],mask[chmin:chmax]*spectrum[chmin:chmax],color=color,linewidth=2,label='Source',zorder=100)  #plot the masked stacked spectrum in the channel range covered by the galaxy emission
+                ax.plot(v,mask*spectrum,color=color,linewidth=2,label='Source',zorder=100)  #plot the masked stacked spectrum in the channel range covered by the galaxy emission
         ax.legend(loc='upper right',prop={'size':11}).set_zorder(1000)
     ax.axhline(y=0,linestyle='--',color='black') #draw the 0-flux line
     if aligned: #if the spectrum is the aligned spectrum
         ax.axvline(x=0,linestyle='-.',color='black') #draw the 0 velocity line
-        ax.axvline(x=v[chmin],linestyle='-.',color='gray',alpha=0.5) #draw the chmin line
-        ax.axvline(x=v[chmax],linestyle='-.',color='gray',alpha=0.5) #draw the chmax line
     if smooth_rms is not None: #if a smoothing is applied
         ax.axhline(y=smooth_rms,linestyle='--',color='dimgray') #draw the smoothed rms line
         ax.axhline(y=-smooth_rms,linestyle='--',color='dimgray') #draw the smoothed rms line
     ax.axhline(y=rms,linestyle='--',color='silver') #draw the final rms line
     ax.axhline(y=-rms,linestyle='--',color='silver') #draw the final rms line
-    ax.tick_params(direction='in',length=10,width=1) #change the ticks of the axes from external to internal, as well as the length and the width
     ax.set_xlabel('Velocity [km/s]') #set the x-axis label
     ax.set_ylabel('<Flux> [{}]'.format(fluxunits)) #set the y-axis label
     ax.set_xlim(np.nanmin(v),np.nanmax(v))
@@ -4884,7 +5171,7 @@ def __source_finder(data,threshold):
 
     Args:
         data (array): 1D array with the data
-        threshold (float): value of the threshold. Elements of data whose absolute value is above the threshold are set to 1, the others to 0
+        threshold (float): flux threshold to be used by the source finder relative to the measured rms in each smoothing iteration. Values in the range of about 3 to 5 have proven to be useful in most situations, with lower values in that range requiring use of the reliability filter to reduce the number of false detections.
         
     Kwargs:
         None
@@ -4901,13 +5188,14 @@ def __source_finder(data,threshold):
     return mask
 
 ############################################################################################# 
-def __source_linker(data,mask,kernel):
+def __source_linker(data,mask,kernel,separation):
     """Assign to kernel-size consecutive positive/negative elements of a 1D array the same value representing the index of the source.
 
     Args:
         data (array): 1D array with the data
         mask (array): 1D array with the mask
-        kernel (int): kernel size
+        kernel (int): minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker.
+        separation (int): maximum channel separation between two sources to be considered a single source
         
     Kwargs:
         None
@@ -4918,12 +5206,14 @@ def __source_linker(data,mask,kernel):
     Raises:
         ValueError: If the kernel is not an odd number
     """
+    link=3
     linked_mask=mask.copy()*np.nan #initialize the linked mask
     pos_index=1 #initialize the positive source index
     neg_index=-1 #initialize the negative source index
     source=False #initialize the source check
-    for i in range(len(mask)-kernel+1): #run over the mask
-        if np.all(mask[i:i+kernel])>0: #if all the channels in the kernel are marked as a source:
+    #REJECT THE DETECTIONS COVERING LESS THAN kernel CHANNELS#
+    for i in range(len(mask)): #run over the mask
+        if np.all(mask[i:i+kernel])>0: #if all the channels in the kernel are marked as a source
             if not source: #if it is a new source
                 start=i #store the channel index
                 source=True #tell you have a source
@@ -4931,38 +5221,53 @@ def __source_linker(data,mask,kernel):
                 pass #do nothing
         else:
             if source: #if you were looking at a source
-                if np.nansum(data[start:i+kernel-1])>0: #if the source is positive
-                    linked_mask[start:i+kernel-1]=pos_index #assing the positive label to the source
+                if np.nansum(data[start:i+kernel-1])>0: #if the source is positive (-1 accounts for 0-indexing and slicing). Imagine 'start' is channel 5 and the kernel=5. If I link the smallest source, it will cover channels 5, 6, 7, 8 and 9. Which means, channel 10 is a non-detection. The kernel gets to channel 10 when i is 6, because when i is 6 than i:i+kernel (that is 6:11) covers channels 6, 7, 8, 9 and 10 because slicing excludes the last element. So, start:i+kernel (that is 5:11) would be 5, 6, 7, 8, 9, 10. But I don't want 10, hence I use -1: start:i+kernel-1 = 5:10 = [5,6,7,8,9]
+                    linked_mask[start:i+kernel-1]=pos_index #assign the positive label to the source (-1 accounts for 0-indexing)
                     pos_index+=1 #increase the positive label
-                elif np.nansum(data[start:i+kernel-1])<0: #if the source is negative
-                    linked_mask[start:i+kernel-1]=neg_index #assing the negative label to the source
+                elif np.nansum(data[start:i+kernel-1])<0: #if the source is negative (-1 accounts for 0-indexing)
+                    linked_mask[start:i+kernel-1]=neg_index #assign the negative label to the source (-1 accounts for 0-indexing)
                     neg_index-=1 #decrease the negative label
                 else: #if the source has a total flux of 0
                     pass #do nothing
                 source=False #tell you are no more looking for a source
-                    
+    #LINK NEIGHBOUR DETECTIONS#
+    i=1
+    while i < np.nanmax(linked_mask):
+        if (np.where(linked_mask==i+1)[0][0]-np.where(linked_mask==i)[0][-1]) <= separation+1 and np.all(linked_mask[np.where(linked_mask==i)[0][-1]+1:np.where(linked_mask==i+1)[0][0]]==0):           
+            linked_mask[np.where(linked_mask>i)[0]]-=1
+        else:
+            i+=1
+    i=-1
+    while i > np.nanmin(linked_mask):
+        if (np.where(linked_mask==i-1)[0][0]-np.where(linked_mask==i)[0][-1]) <= separation+1 and np.all(linked_mask[np.where(linked_mask==i)[0][-1]+1:np.where(linked_mask==i-1)[0][0]]==0):           
+            linked_mask[np.where(linked_mask<i)[0]]+=1
+        else:
+            i-=1
+
     return linked_mask    
 
 #############################################################################################    
-def __stack(data,x,y,weighting,ignore=None,flip=False,diagnostic=False,**diagnostic_kwargs):
+def __stack(data,x,y,weighting,stack_fluxrange='negative',stack_statistics='mad',flip=False,diagnostic=False,**diagnostic_kwargs):
     """Stack the spectra for each sky position (x,y).
 
     Args:
         data (ndarray): 3D array with the data
         x,y (int): x,y pixel coordinates of the spectra to stack
-        weighting (string): type of weight to apply during the stacking between:
+        weighting (str): type of weight to apply during the stacking between:
             - None (default): the stacked spectrum will be avereged with the number of stacked spectra
             - rms: the stacked spectrum will be avereged with the square of the rms of each stacked spectrum
-        ignore (array-like): array-like with the min and max channel of the emission region to ignore for the rms computation
-        flip (boolean): flip the cube along the spectral axis (set to True if the spectral resolution is negative)
-        diagnostic (boolean): store all the diagnostic files and plots. Warning: the diagnostic might occupy large portions of the disk (default: False)
+        stack_fluxrange (str): flux range to be used in the noise measurement of the source finder. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artefacts from affecting the noise measurement. If set to anything else, all pixels will be used in the noise measurement irrespective of their flux.
+        stack_statistics (str): statistic to be used in the noise measurement process of the source finder. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts.
+        flip (bool): flip the cube along the spectral axis (set to True if the spectral resolution is negative)
+        diagnostic (bool): store all the diagnostic files and plots. Warning: the diagnostic might occupy large portions of the disk (default: False)
         
     Kwargs:
         v (array-like): spectral axis
-        fluxunits (string): units of the flux
-        color (string): color of the plot
-        outdir (string): output directiory to store the plots
-        format (string): file format of the plots
+        fluxunits (str): units of the flux
+        color (str): color of the plot
+        aligned (bool): tells if the spectrum is aligned (True) or not w.r.t. the redshift
+        outdir (str): output directiory to store the plots
+        plot_format (str): file format of the plots
 
     Returns:
         Stacked spectrum, measured and expected rms of the stacked spectrum after each stacking as numpy.array each.
@@ -4977,19 +5282,12 @@ def __stack(data,x,y,weighting,ignore=None,flip=False,diagnostic=False,**diagnos
     exp=[] #initialize the expected rms list
     
     if diagnostic: #if the diagnostic plots must be made
-        v=diagnostic_kwargs['v'] #store the spectral axis
-        fluxunits=diagnostic_kwargs['fluxunits'] #store the diagnostic plots format
-        color=diagnostic_kwargs['color'] #store the spectrum color
-        outdir=diagnostic_kwargs['outdir'] #store the diagnostic plots output folder
-        format=diagnostic_kwargs['format'] #store the diagnostic plots format
-        chmin=ignore[0] #store the lower channel of the galactic emission
-        chmax=ignore[1] #store the upper channel of the galactic emission
-        left_mean=[] #initialize the list of mean of the low velocities
-        right_mean=[] #initialize the list of mean of the high velocities
-        left_rms=[] #initialize the list of rms of the low velocities
-        right_rms=[] #initialize the list of rms of the high velocities
-        tot_mean=[] #initialize the total mean list
-        tot_rms=[] #initialize the total rms list
+        v=diagnostic_kwargs.get('v') #store the spectral axis
+        fluxunits=diagnostic_kwargs.get('fluxunits') #store the diagnostic plots format
+        color=diagnostic_kwargs.get('color') #store the spectrum color
+        aligned=diagnostic_kwargs.get('aligned') #store the diagnostic plots format
+        outdir=diagnostic_kwargs.get('outdir') #store the diagnostic plots output folder
+        plot_format=diagnostic_kwargs.get('plot_format') #store the diagnostic plots format
         if not os.path.exists(outdir): #if the output folder does not exist
             os.makedirs(outdir) #create the folder
             
@@ -5007,138 +5305,74 @@ def __stack(data,x,y,weighting,ignore=None,flip=False,diagnostic=False,**diagnos
     ############################################
         
     for i in tqdm(zip(y,x),desc='Spectra stacked',total=len(x)): #run over the pixels    
-        if diagnostic: #if the diagnostic plots must be made
-            dummy=data[:,i[0],i[1]].copy() #copy the spectrum used in the stacking
-            left_mean.append(np.nanmean(dummy[:chmin])) #calculate the low velocities mean
-            right_mean.append(np.nanmean(dummy[chmax:])) #calculate the high velocities mean
-            left_rms.append(__get_rms(dummy[:chmin],'mad')) #calculate the low velocities rms
-            right_rms.append(__get_rms(dummy[chmax:],'mad')) #calculate the high velocities rms
-            dummy[chmin:chmax+1]=np.nan #blank the galactic emission
-            tot_mean.append(np.nanmean(dummy)) #calculate the total mean
-            tot_rms.append(__get_rms(dummy,'mad')) #calculate the total rms
-        
-            ncols=1 #number of columns in the plot
-            nrows=3 #number of rows in the plot
-            fig=plt.figure(figsize=(12*ncols,6*nrows)) #create the figure
-            fig.suptitle('Pre stack, to be stacked and after stack spectrum comparison (N={})'.format(N),fontsize=24) #add the title
+        if np.all(np.isnan(data[:,i[0],i[1]])): #if the spectrum to be stacked is empty
+            pass
+        else:
+            if diagnostic: #if the diagnostic plots must be made
+                dummy=data[:,i[0],i[1]].copy() #copy the spectrum used in the stacking
+                pre_rms=__get_rms(dummy,stack_statistics) #calculate the total rms
             
-            ax=fig.add_subplot(nrows,ncols,1) #create the subplot for the pre-stack stacked spectrum
-            if N==1: #if this is the first iteration
-                ax=__plot_stack_spectrum(v,stack,None,color,True,chmin,chmax,0,fluxunits)
-            else:
-                ax=__plot_stack_spectrum(v,stack/weights,None,color,True,chmin,chmax,stack_rms[-1],fluxunits)
-            ax.set_xlabel('')
-            ax.xaxis.set_ticklabels([])
-            if N>1: #after the first iteration
-                ax.set_ylim(ylim)
+                ncols=1 #number of columns in the plot
+                nrows=3 #number of rows in the plot
+                fig=plt.figure(figsize=(12*ncols,6*nrows)) #create the figure
+                fig.suptitle('Pre stack, to be stacked and after stack spectrum comparison (N={})'.format(N),fontsize=24) #add the title
+                
+                ax=fig.add_subplot(nrows,ncols,1) #create the subplot for the pre-stack stacked spectrum
+                if N==1: #if this is the first iteration
+                    ax=__plot_stack_spectrum(v,stack,None,color,aligned,0,None,fluxunits)
+                else:
+                    ax=__plot_stack_spectrum(v,stack/weights,None,color,aligned,stack_rms[-1],None,fluxunits)
+                ax.set_xlabel('')
+                ax.xaxis.set_ticklabels([])
+                if N>1: #after the first iteration
+                    ax.set_ylim(ylim)
+                
+                ax=fig.add_subplot(nrows,ncols,2) #create the subplot for the spectrum to be stacked
+                ax=__plot_stack_spectrum(v,data[:,i[0],i[1]],None,color,aligned,pre_rms,None,fluxunits)
+                ax.set_xlabel('')
+                ax.xaxis.set_ticklabels([])
             
-            ax=fig.add_subplot(nrows,ncols,2) #create the subplot for the spectrum to be stacked
-            ax=__plot_stack_spectrum(v,data[:,i[0],i[1]],None,color,True,chmin,chmax,tot_rms[-1],fluxunits)
-            ax.set_xlabel('')
-            ax.xaxis.set_ticklabels([])
-        
-        if weighting is None:
-            w=1 #the weight is 1
-        elif weighting == 'rms':    
-            w=1/__get_rms(data[:,i[0],i[1]],'mad')**2 #the weight is 1/rms**2 of the input spectrum
-            if np.isnan(w): #!!! BUG !!! Somehow, w can become nan. In that case, set it to 0 to discard the spectrum
-                w=0
-        ########## W.I.P. DON'T USE IT #############
-        elif weighting == 'pb':
-                w=(pb[i[0],i[1]])**2
-        ############################################
-        stack=np.nansum((stack,data[:,i[0],i[1]]*w),axis=0) #stack the input spectrum
-        weights+=w #stack the weight
-        dummy=stack.copy()/weights #create a dummy copy of the stacked spectrum. Here we divide for the number of stacked weights so far, since we want the rms as if we have stacked all the spectra
-        if ignore is not None: #if the channel range over which the flux is ignored is provided
-            dummy[ignore[0]+1:ignore[1]]=np.nan #blank the region not used for rms calculation
+            if weighting is None:
+                w=1 #the weight is 1
+            elif weighting == 'rms': 
+                w=1/__get_rms(data[:,i[0],i[1]],stack_statistics)**2 #the weight is 1/rms**2 of the input spectrum
+            ########## W.I.P. DON'T USE IT #############
+            elif weighting == 'pb':
+                    w=(pb[i[0],i[1]])**2
+            ############################################
+            stack=np.nansum((stack,data[:,i[0],i[1]]*w),axis=0) #stack the input spectrum
+            weights+=w #stack the weight
+            dummy=stack.copy()/weights #create a dummy copy of the stacked spectrum. Here we divide for the number of stacked weights so far, since we want the rms as if we have stacked all the spectra
+                
+            if stack_fluxrange=='negative':
+                dummy[dummy>=0]=np.nan
+            elif stack_fluxrange=='positive':
+                dummy[dummy<=0]=np.nan
+            stack_rms.append(__get_rms(dummy,stack_statistics)) #calculate the rms of the stacked spectrum        
+            exp.append(stack_rms[0]/np.sqrt(N)) #expected value for the rms
             
-        ####### ADD FLUXRANGE AND STATISTICS #######
-        stack_fluxrange='negative'
-        stack_statistcs='mad'
-        if stack_fluxrange=='negative':
-            dummy[dummy>=0]=np.nan
-        stack_rms.append(__get_rms(dummy,stack_statistcs)) #calculate the rms of the stacked spectrum
-        ############################################
-        
-        exp.append(stack_rms[0]/np.sqrt(N)) #expected value for the rms
-        
-        if diagnostic: #if the diagnostic plots must be made
-            ax=fig.add_subplot(nrows,ncols,3) #create the subplot for the post-stack stacked spectrum
-            ax=__plot_stack_spectrum(v,stack/weights,None,color,True,chmin,chmax,stack_rms[-1],fluxunits)
-            if N==1: #after the first iteration
-                ylim=ax.get_ylim() #get the ylim
-            else:
-                ax.set_ylim(ylim)
-            fig.subplots_adjust(top=0.95,hspace=0.1)
-            fig.savefig(outdir+'result_after_{}_stacked_spectra'.format(N)+format,dpi=300,bbox_inches='tight')
-            plt.close(fig=fig)
-        N+=1 #increase the number of stacked spectra
-        
-    if diagnostic:  #if the diagnostic plots must be made
-        ncols=2 #number of columns in the plot
-        nrows=1 #number of rows in the plot
-        fig=plt.figure(figsize=(6*ncols,6*nrows)) #create the figure
-        ax=fig.add_subplot(nrows,ncols,1) #create the subplot for the rms histogram
-        ax.set_title('RMS',fontsize=20)
-        hist(left_rms,bins='freedman',color='green',histtype='stepfilled',alpha=0.5,label='Low velocities') #plot the low velocities rms histogram
-        hist(right_rms,bins='freedman',color='blue',histtype='stepfilled',alpha=0.5,label='High velocities') #plot the high velocities rms histogram
-        hist(tot_rms,bins='freedman',color=None,edgecolor='black',histtype='step',linewidth=1.5,label='Both') #plot the total rms histogram
-        ax.axvline(x=np.nanmean(tot_rms),linestyle='--',color='gray',label='Mean rms') #add the mean rms line 
-        ax.tick_params(direction='in',length=10,width=1) #change the ticks of the axes from external to internal
-        ax.set_xlabel('RMS') #set the x-axis label
-        ax.set_ylabel('Counts') #set the y-axis label
-        ax.legend(loc='upper right',prop={'size':11})
+            if diagnostic: #if the diagnostic plots must be made
+                ax=fig.add_subplot(nrows,ncols,3) #create the subplot for the post-stack stacked spectrum
+                ax=__plot_stack_spectrum(v,stack/weights,None,color,aligned,stack_rms[-1],None,fluxunits)
+                if N==1: #after the first iteration
+                    ylim=ax.get_ylim() #get the ylim
+                else:
+                    ax.set_ylim(ylim)
+                fig.subplots_adjust(top=0.95,hspace=0.1)
+                fig.savefig(outdir+'result_after_{}_stacked_spectra'.format(N)+plot_format,dpi=300,bbox_inches='tight')
+                plt.close()
+            N+=1 #increase the number of stacked spectra
     
-        ax=fig.add_subplot(nrows,ncols,2) #create the subplot for the mean histogram
-        ax.set_title('Mean',fontsize=20)
-        hist(left_mean,bins='freedman',color='green',histtype='stepfilled',alpha=0.5,label='Low velocities') #plot the low velocities mean histogram
-        hist(right_mean,bins='freedman',color='blue',histtype='stepfilled',alpha=0.5,label='High velocities') #plot the high velocities mean histogram
-        hist(tot_mean,bins='freedman',color=None,edgecolor='black',histtype='step',linewidth=1.5,label='Both') #plot the total mean histogram
-        ax.axvline(x=0,linestyle='--',color='gray') #add the 0-mean line
-        xl=np.nanmax((np.abs(left_mean),np.abs(right_mean)))*1.1
-        ax.tick_params(direction='in',length=10,width=1) #change the ticks of the axes from external to internal
-        ax.set_xlabel('Mean') #set the x-axis label
-        ax.set_ylabel('Counts') #set the y-axis label
-        ax.set_xlim(-xl,xl)
-        ax.legend(loc='upper right',prop={'size':11})
-        ax.yaxis.set_label_position('right')
-        ax.yaxis.tick_right()
-        fig.subplots_adjust(wspace=0.1)
-        fig.savefig(outdir+'noise_histograms'+format,dpi=300,bbox_inches='tight')
-        plt.close(fig=fig)
-        plt.ion() #re-enable the interactive plotting
-
+    if diagnostic: #if the diagnostic plots must be made
+        plt.ion() #re-enable the interactive plotting 
+        
     return stack/weights,stack_rms,exp
     
-### WIP IMPROVED GAUSSIAN FIT ###
-
-# peak=np.nanmax(sources[i]) #define the peak of the gaussian as the maximum of the spectrum
-# model=models.Gaussian1D(amplitude=peak,mean=0,stddev=10*2.355) #built the gaussian model
-# v_fit=v[np.where(~np.isnan(sources[i]))] #extract the velocities corresponding to non-nan in the spectrum
-# spectrum=sources[i][np.where(~np.isnan(sources[i]))] #extract the not-nan values
-# model.amplitude.bounds=(0,2*peak) #bound the amplitude of the fit
-# model.mean.bounds=(np.nanmin(v_fit),np.nanmax(v_fit)) #bound the velocity of the fit
-# model.stddev.bounds=(None,len(spectrum)/2.355) #bound the width to account for how many channels are detected in the source finder
-# #Indeed, if I don't bound the width, for very low S/N lines the width goes up unrealistically.
-# #If the upper limit to the width is given by how many channels are recovered I can account for that
-# #Now we fit assigning a weight to each flux point equal to its S/N, so that points close to the noise value counts less.
-# #We also want to calculate the uncertainties on the model parameters
-# total_fit=fit()(model,v_fit,spectrum,weights=spectrum/rms[i]) #do the fit. Weights are 1/error. They are used only if calc_uncertainties=True
-# model.amplitude=total_fit.amplitude #bound the amplitude of the fit
-# model.mean=total_fit.mean #bound the velocity of the fit
-# model.stddev=total_fit.stddev #bound the width to account for how many channels are detected in the source finder
-# total_fit=fit(calc_uncertainties=True)(model,v_fit,spectrum,weights=spectrum/rms[i]) #do the fit. Weights are 1/
-# flux.append(np.nansum(total_fit(v_fit)))
-# param_cov=total_fit.cov_matrix.cov_matrix #get the covariance matrix. The element on the diagonal are the variances, i.e., the error squared of each parameter
-# #calculate the error on the best-fit flux using the propagation of error on the function f=a*exp(-(x-b)**2/(2*c**2))
-# #calculate (df/da)**2 * da**2, where da**2 is the [0,0] element of the covariance matrix
-# #df/da is equal to f/a
-# f1=param_cov[0,0]*(total_fit(v_fit)/total_fit.amplitude)**2
-# #calculate (df/db)**2 * db**2, where db**2 is the [1,1] element of the covariance matrix
-# #df/db is equal to f*(x-b)/c**2
-# f2=param_cov[1,1]*(total_fit(v_fit)*(v_fit-total_fit.mean)/total_fit.stddev**2)**2
-# #calculate (df/dc)**2 * dc**2, where dc**2 is the [2,2] element of the covariance matrix
-# #df/dc is equal to f*(x-b)**2/c**3
-# f3=param_cov[2,2]*(total_fit(v_fit)*((v_fit-total_fit.mean)**2)/total_fit.stddev**3)**2
-# err_flux.append(np.nansum(np.sqrt(f1+f2+f3)))
+############## CODE FOR ROTATED 2D ELLIPTICAL GAUSSIAN ###############
+# def elliptical_gaussian(x, y, amplitude, xo, yo, sigma_x, sigma_y, theta):
+#     theta = np.radians(90-theta)
+#     a = (np.cos(theta)**2)/(2*sigma_x**2) + (np.sin(theta)**2)/(2*sigma_y**2)
+#     b = -(np.sin(2*theta))/(4*sigma_x**2) + (np.sin(2*theta))/(4*sigma_y**2)
+#     c = (np.sin(theta)**2)/(2*sigma_x**2) + (np.cos(theta)**2)/(2*sigma_y**2)
+#     g = amplitude * np.exp(-(a*((x-xo)**2) + 2*b*(x-xo)*(y-yo) + c*((y-yo)**2)))
+#     return g
