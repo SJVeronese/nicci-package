@@ -58,7 +58,7 @@ Upgrade nicci with pip
 * fitsarith: Perform arithmetic operations (sum, subtraction, multiplication, division) between two FITS files.
 * fixmask: Fix a 3D detection mask by setting the voxels corresponding to negative detections to 0, based on a reference data cube. It is assumed that a value > 0 in the mask indicates a detection.
 * gaussfit: Perform a Gaussian fit on a spectral cube. This function fits a single Gaussian profile to each spaxel (spatial pixel) in the spectral cube.
-* getpv: Extracts a position-velocity slice from a given data cube along a path defined by specified points, angle, and width. Optionally, it can plot the slice and save it to a FITS file.
+* getpv: Extract a position-velocity slice from a given data cube along a path defined by specified points, angle, and width. Optionally, it can plot the slice and save it to a FITS file.
 * lines_finder: One-dimensional source finding algorithm for spectral lines detection. It resembles the The Source Finding Application, SoFiA (Serra et al. 2015, Westmeier et al. 2021).
 * noise_variations: Determine the noise variations of a data cube along the spatial and spectral axes.
 * plotmom: Plot the given moment maps. All (moment 0, moment 1, and moment 2) can be plotted simultaneously or only one.
