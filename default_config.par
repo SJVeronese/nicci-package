@@ -1,0 +1,175 @@
+;configuration file for nicci. Use ';' or '#' to comment the parameters you don't need/know
+
+[GENERAL]
+verbose     =      #if True, all plots and ancillary information will be printed to terminal [True,False] (default: False)
+
+[INPUT]
+path        =      #path to the working directory (generally where the data are stored). (defatult: current directory)
+
+[COSMOLOGY]
+HO          =      #Hubble parameter (default: 69.6)
+Omegam      =      #Omega matter (default: 0.286)
+Omegav      =      #Omega vacuum (default: 0.714)
+
+[GALAXY]
+objname     =      #name of the object (default: None)
+distance    =      #distance of the object in Mpc (default: None)
+redshift    =      #redshift of the object (default: None)
+asectokpc   =      #arcsec to kpc conversion (default: None)
+vsys        =      #systemic velocity of the object in km/s (default: None)
+pa          =      #position angle of the object in deg (default: None)
+inc         =      #inclination angle of the object in deg (default: None)
+
+[CUBEPAR]
+pixunits    =      #spatial units (default: None)
+specunits   =      #spectral units (default: None)
+fluxunits   =      #flux units (default: None)
+pixelres    =      #pixel resolution in pixunits (default: None)
+spectralres =      #spectral resolution in specunits (default: None)
+rms         =      #root-mean-square value in fluxunits (default: None)
+
+[BEAM]
+bmaj        =      #beam major axis in pixunits (default: None)
+bmin        =      #beam minor axis in pixunits (default: None)
+bpa         =      #beam position angle in degrees (default: None)
+
+[CORRECTION]
+pbcorr      =      #apply the primary beam correction [True,False] (default: False)
+
+[FITS]
+datacube    =      #name of the fits file of the data cube including .fits (default: None)
+beamcube    =      #name of the fits file of the beam cube including .fits (default: None)
+maskcube    =      #name of the fits file of the mask cube including .fits (default: None)
+mask2d      =      #name of the fits file of the 2D mask including .fits (default: None)
+channelmap  =      #name of the fits file of the channel map including .fits (default: None)
+modelcube   =      #name of the fits file of the model cube including .fits (default: None)
+mom0map     =      #name of the fits file of the moment 0 map including .fits (default: None)
+mom1map     =      #name of the fits file of the moment 1 map including .fits (default: None)
+mom2map     =      #name of the fits file of the moment 2 map including .fits (default: None)
+vfield      =      #name of the fits file of the velocity field including .fits (default: None)
+
+[CHANMAP]
+chanmin     =      #starting channel to plot in the channel map (default: 1)
+chanmax     =      #ending channel to plot in the channel map (default: None)
+chansep     =      #channel separation to plot in the channel map (chamin,chanmin+chansep,chanmin+2*chansep,...,chanmax) (default: 1)
+box         =      #comma-separated pixel edges of the box to extract the channel map in the format [xmin,xmax,ymin,ymax] (default: None)
+nsigma      =      #rms threshold to plot the contours (lowest contours will be nsigma*rms) (default: 3)
+usemask     =      #use a mask in the channel map [True,False] (default: False)
+output      =      #output directory/name to save the plot. Cannot be empty or None (default: None)
+
+[CUBEDO]
+datacube    =      #name of the fits file of the data cube including .fits. If empty, is the same of [FITS] datacube (default: None)
+operation   =      #operation to perform on the cube [blank,clip,crop,cut,extend,mirror,mom0,shuffle,toint] (default: None)
+chanmin     =      #first channel for the operations 'blank,cut,mom0' (default: 1)
+chanmax     =      #last channel for the operations 'blank,cut,mom0' (default: None)
+box         =      #comma-separated pixel edges of the box to extract for operation 'cut' in the format [xmin,xmax,ymin,ymax] (default: None)
+addchan     =      #number of channels to add in operation 'extend'. Negative values add lower channels, positive add higher channels (default: None)
+value       =      #value to assign to blank pixel in operation 'blank' (blank is np.nan) (default: blank)
+usemask     =      #use a 2D mask in the operation 'clip' [True,False] (default: False)
+mask        =      #name of the fits file of the 2D mask including .fits. If empty, is the same of [FITS] mask2d (default: None)
+cliplevel   =      #clip threshold as % of the peak (0.5 is 50%) for operation 'clip' (default: 0.5)
+center      =      #the rotation center as [x0,y0,z0] around which the cube is mirrored when operation is 'mirror' (default: None)
+output      =      #output directory/name to save the new cube. Cannot be empty or None (default: None)
+
+[CUBESTAT]
+nsigma      =      #rms threshold in terms of nsigma*rms for detection limit (default: 3)
+statistics  =      #statistic to be used in the noise measurement. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts (default: 'mad')
+fluxrange   =      #flux range to be used in the noise measurement. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artefacts from affecting the noise measurement. If set to anything else, all pixels will be used in the noise measurement irrespective of their flux (default: 'negative')
+
+[FITSARITH]
+fits1       =      #name of reference fits file including .fits (default: None)
+fits2       =      #name of second fits file including .fits (default: None)
+operation   =      #operation to do between the two fits [sum,sub,mul,div] (default:None)
+output      =      #output directory/name to save the new fits. Cannot be empty or None (default: None)
+
+[FIXMASK]
+datacube    =      #name of the fits file of the reference data cube including .fits. If empty, is the same of [FITS] datacube (default: None)
+maskcube    =      #name of the fits file of the mask cube including .fits. If empty, is the same of [FITS] maskcube (default: None)
+output      =      #output directory/name to save the new cube. Cannot be empty or None (default: None)
+
+[GAUSSFIT]
+datacube    =      #name of the fits file of the data cube to fit including .fits. If empty, is the same of [FITS] datacube (default: None)
+mask        =      #name of the fits file of the 2D mask including .fits. If empty, is the same of [FITS] mask2d (default: None)
+components  =      #number of components (1 or 2) to fit (default: 1)linefwhm    =      #first guess on the fwhm of the line profile in km/s (default: 15)
+amp_thresh  =      #amplitude threshold for the fit. If a profile peak is < threshold, the fit wont be performed on that spectrum (default: 0)
+p_reject    =      #p-value threshold for fit rejection. If a best-fit as p>p_reject, it will be rejected (default: 1) 
+clipping    =      #clip the spectrum to a % of the profile peak [True,False] (default: False)
+threshold   =      #clip threshold as % of the peak (0.5 is 50%) if clipping is True (default: 0.5)
+errors      =      #compute the errors on the best-fit [True,False] (default: False)
+write_field =      #compute the best-fit velocity field [True,False] (default: False)
+output      =      #output directory/name to save the new cube. Cannot be empty or None (default: None)
+
+[GETPV]
+datacube    =      #name of the fits file of the data cube including .fits. If empty, is the same of [FITS] datacube (default: None)
+width       =      #width of the slice in arcsec. If not given, will be the beam size (default: None)
+points      =      #RA-DEC comma-separated coordinate of the slice points in decimal degree. If two are given ([x,y]), it is assumed they are the center of the slice. Else, they need to be the starting and ending coordinates ([xmin,xmax,ymin,ymax]) (default: None)
+angle       =      #position angle of the slice in degree. If not given, will be the object position angle (default: None)
+chanmin     =      #starting channel of the slice (default: 0)
+chanmax     =      #ending channel of the slice (default: None)
+statistics  =      #statistic to be used in the noise measurement. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts (default: 'mad')
+fluxrange   =      #flux range to be used in the noise measurement. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artefacts from affecting the noise measurement. If set to anything else, all pixels will be used in the noise measurement irrespective of their flux (default: 'negative')
+nsigma      =      #rms threshold to plot the contours (lowest contours will be nsigma*rms) (default: 3)
+output      =      #output directory/name to save the result. Cannot be empty or None (default: None)
+
+[LINESFINDER]
+smooth_ker  =      #boxcar kernel size (or list of kernel sizes) to apply. The individual kernel sizes must be odd integer values of 3 or greater and denote the full width of the Boxcar filter used to smooth the spectrum. Set to None or 1 to disable (default: None)
+threshold   =      #flux threshold to be used by the source finder relative to the measured rms in each smoothing iteration. Values in the range of about 3 to 5 have proven to be useful in most situations, with lower values in that range requiring use of the reliability filter to reduce the number of false detections (default: 3)
+replace     =      #before smoothing the spectrum during n source finder iteration, every flux value that was already detected in a previous iteration will be replaced by this value multiplied by the original noise level in the non-smoothed data cube, while keeping the original sign of the data value. This feature can be disabled by specifying a value of < 0. (default: 2)
+statistics  =      #statistic to be used in the noise measurement process of the source finder. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts (default: 'mad')
+fluxrange   =      #flux range to be used in the noise measurement of the source finder. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artefacts from affecting the noise measurement. If set to anything else, all pixels will be used in the noise measurement irrespective of their flux (default: 'negative')
+link_ker    =      #minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker (default: 3)
+min_size    =      #minimum number of channels a source can cover (default: 3)
+rel_thresh  =      #reliability threshold in the range of 0 to 1. Sources with a reliability below this threshold will be discarded (default: 0)
+rel_kernel  =      #scaling factor for the size of the Gaussian kernel used when estimating the density of positive and negative detections in the reliability parameter space (default: 0.4)
+rel_snrmin  =      #lower signal-to-noise limit for reliable sources. Detections that fall below this threshold will be classified as unreliable and discarded. The value denotes the integrated signal-to-noise ratio of the source. Note that the spectral resolution is assumed to be equal to the channel width (default: 3)
+negative    =      #if set to False, then the detections with negative flux will be discarded at the end of the process (default: True)
+gauss_tests =      #if set to True, two statistical tests (Anderson-Darling and Kanekar) will be performed to quantify the gaussianity of the noise in the input spectra (default: False)
+p-value     =      #p-value threshold of the Anderson-Darling test to reject non-Gaussian spectra (a spectrum has Gaussian noise if p>p_value) (default: 0.05)
+kanekar     =      #two comma-separated floats representing the minimum and maximum value of the Kanekar test to reject non-Gaussian spectra (a spectrum has Gaussian noise if kanekar_min<test_value<kanekar_max) (default: None)
+catalogue   =      #if True, a csv file containing the sources catalogue will be written on the disk (default: False)
+output      =      #output directory/name to save the result. Cannot be empty or None (default: None)
+
+[NOISE VARIATIONS]
+statistics  =      #statistic to be used in the noise measurement. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts (default: 'mad')
+fluxrange   =      #flux range to be used in the noise measurement. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artefacts from affecting the noise measurement. If set to anything else, all pixels will be used in the noise measurement irrespective of their flux (default: 'negative')
+output      =      #output directory/name to save the new cube. Cannot be empty or None (default: None)
+
+[PLOTMOM]
+output      =      #output directory/name to save the plot. Cannot be empty or None (default: None)
+
+[REMOVEMOD]
+method      =      #method to remove the model [all,blanking,b+s,negblank,subtraction] (default: subtraction)
+threshold   =      #flux threshold for the 'all,blanking,b+s' methods in units of cube flux (default: 0)
+output      =      #output directory/name to save the new cube. Cannot be empty or None (default: None)
+
+[ROTCURVE]
+center      =      #x-y comma-separated coordinates of the rotational center in pixel (default: None)
+save_csv    =      #store the output in a csv file [True,False] (default: False)
+output      =      #output directory/name to save the result. Cannot be empty or None (default: None)
+
+[STACKING]
+center      =      #x-y comma-separated coordinates of the rotational center in pixel (default: None)
+nregions    =      #number of regions from which the spectra are extracted and stacked (default: None)
+shape       =      #shape of regions to stack between 'cells', cones' and 'concentric' (default: 'cones')
+between     =      #comma-separated min and max angle from which the stacking regions are defined. Set to None to disable (default: None)
+radii       =      #comma-separated min and max radius from the galactic center in pixunits from which the spectra are extracted and stacked (default: None)
+weighting   =      #type of weight to apply during the stacking between 'None' and 'rms' (default None)
+statistics  =      #statistic to be used in the noise measurement. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts (default: 'mad')
+fluxrange   =      #flux range to be used in the noise measurement of the source finder. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artefacts from affecting the noise measurement. If set to anything else, all pixels will be used in the noise measurement irrespective of their flux (default: 'negative')
+output      =      #output directory/name to save the result. Cannot be empty or None (default: None)
+
+[VELFI]
+radii       =      #radii in pixunits at which the rotation velocity is measured (default: None)
+vrot        =      #rotation velocities (subtracted from the systemic velocities) in specunits for the radii (default: None)
+vrad        =      #expansion velocity for the radii (default: None)
+center      =      #comma-separated value for the x and y coordinates of the rotation center in pixel (default: None)
+extend_only =      #extend a given velocity field (True) or write a new one from scratch (False) (default: False)
+correct     =      #correct the input rotation velocities for the inclination angles (True) or not (False) (default: False)
+output      =      #output directory/name to save the new cube. Cannot be empty or None (default: None)
+
+[PLOTSTYLE]
+ctr_width   =      #width of the contours levels (default: 2)
+left_space  =      #width of the left margin in axis units (from 0 to 1) (default: 0.05)
+upper_space =      #width of the upper margin in axis units (from 0 to 1) (Default: 0.95)
+lower_space =      #width of the lower margin in axis units (from 0 to 1) (Default: 0.05)
+format      =      #file format for the plots (default: pdf)

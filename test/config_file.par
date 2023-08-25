@@ -1,0 +1,69 @@
+;configuration file for nicci. Use ';' or '#' to comment the parameters you don't need/know
+
+[GENERAL]
+verbose     =   True   #if True, all plots and ancillary information will be printed to terminal [True,False] (default: False)
+
+[INPUT]
+path        =   ./   #path to the working directory (generally where the data are stored). (defatult: current directory)
+
+[GALAXY]
+objname     =   ngc_2403   #name of the object (default: None)
+distance    =   3.18   #distance of the object in Mpc (default: None)
+asectokpc   =   0.02   #arcsec to kpc conversion (default: None)
+vsys        =   133200   #systemic velocity of the object in km/s (default: None)
+pa          =   124.5   #position angle of the object in deg (default: None)
+
+[BEAM]
+bmaj        =   0.014548914   #beam major axis in pixunits (default: None)
+bmin        =   0.0136497   #beam minor axis in pixunits (default: None)
+bpa         =   -25.201924   #beam position angle in degrees (default: None)
+
+[CORRECTION]
+pbcorr      =   True   #apply the primary beam correction [True,False] (default: False)
+
+[FITS]
+datacube    =   ngc2403_HI_cube_mwfilt.fits   #name of the fits file of the data cube including .fits (default: None)
+beamcube    =   ngc2403_HI_pb.fits   #name of the fits file of the beam cube including .fits (default: None)
+maskcube    =   ngc2403_HI_mask.fits   #name of the fits file of the mask cube including .fits (default: None)
+mask2d      =   ngc2403_HI_mask_2d.fits   #name of the fits file of the 2D mask including .fits (default: None)
+mom0map     =   ngc2403_HI_mom0.fits   #name of the fits file of the moment 0 map including .fits (default: None)
+mom1map     =   ngc2403_HI_mom1.fits   #name of the fits file of the moment 1 map including .fits (default: None)
+mom2map     =   ngc2403_HI_mom2.fits   #name of the fits file of the moment 2 map including .fits (default: None)
+
+[CHANMAP]
+chanmin     =   29   #starting channel to plot in the channel map (default: 1)
+chanmax     =   79   #ending channel to plot in the channel map (default: None)
+chansep     =   2   #channel separation to plot in the channel map (chamin,chanmin+chansep,chanmin+2*chansep,...,chanmax) (default: 1)
+nsigma      =   5   #rms threshold to plot the contours (lowest contours will be nsigma*rms) (default: 3)
+usemask     =   True   #use a mask in the channel map [True,False] (default: False)
+output      =   ngc2403_HI_cube_mwfilt_chanmap   #output directory/name to save the plot. Cannot be empty or None (default: None)
+
+[CUBEDO]
+datacube    =   ngc2403_HI_cube.fits   #name of the fits file of the data cube including .fits. If empty, is the same of [FITS] datacube (default: None)
+operation   =   blank   #operation to perform on the cube [blank,clip,crop,cut,extend,mirror,mom0,shuffle,toint] (default: None)
+chanmin     =   16   #first channel for the operations 'blank,cut,mom0' (default: 1)
+chanmax     =   28   #last channel for the operations 'blank,cut,mom0' (default: None)
+output      =   ngc2403_HI_cube_mwfilt   #output directory/name to save the new cube. Cannot be empty or None (default: None)
+
+[CUBESTAT]
+nsigma      =   3   #rms threshold in terms of nsigma*rms for detection limit (default: 3)
+
+[GAUSSFIT]
+mask        =   ngc2403_HI_mask_2d.fits   #name of the fits file of the data cube to fit including .fits. If empty, is the same of [FITS] datacube (default: None)
+write_field =   True   #compute the best-fit velocity field [True,False] (default: False)
+output      =   ngc2403_HI_gauss   #output directory/name to save the new cube. Cannot be empty or None (default: None)
+
+[GETPV]
+datacube    =   ngc2403_HI_cube.fits   #name of the fits file of the data cube including .fits. If empty, is the same of [FITS] datacube (default: None)
+points      =   114.183333335,65.5930555562   #RA-DEC comma-separated coordinate of the slice points in decimal degree. If two are given ([x,y]), it is assumed they are the center of the slice. Else, they need to be the starting and ending coordinates ([xmin,xmax,ymin,ymax]) (default: None)
+nsigma      =   4   #rms threshold to plot the contours (lowest contours will be nsigma*rms) (default: 3)
+output      =   ngc2403_HI_pv_major   #output directory/name to save the result. Cannot be empty or None (default: None)
+
+[NOISE VARIATIONS]
+output      =   ngc2403_HI_noise   #output directory/name to save the new cube. Cannot be empty or None (default: None)
+
+[PLOTMOM]
+output      =   ngc2403_HI_maps   #output directory/name to save the plot. Cannot be empty or None (default: None)
+
+[REMOVEMOD]
+output      =   ngc2403_HI_extraplanar   #output directory/name to save the new cube. Cannot be empty or None (default: None)
