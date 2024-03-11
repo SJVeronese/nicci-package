@@ -6,134 +6,44 @@ Naive functIons Collection for Cubes and Images
 #############################################################################################
 #
 # FILENAME: main
-# VERSION: 0.14
+# VERSION: 0.15
 # DATE: 25/08/2023
 # CHANGELOG:
-#- chanmap
-#   - fixed channel range to account for python 0-counting
-#   - fixed error message if mask and data cube have different sizes
-#   - fixed error message if some cube properties must be retrieved by cubestat
-#   - improved figure size
-#   - added option to choose the colormap
-#   - added option to choose the contours colormap
-#   - removed the option to save the plot
-#   - collapsed the output arguments into a single argument
-#   - minor code rearranging to improve code visualization
-#- cubedo
-#   - fixed spectral axis calculation if the spectral resolution is negative
-#   - fixed integer conversion not being performed if write_fits=False for operation 'toint'
-#   - fixed channel range calculation for operation 'blank','cut','mom0'
-#   - fixed mask and cube shape comparison for operation 'mom0'
-#   - improved some argument naming
-#   - improved argument handling for operation 'mirror'
-#   - improved excecution time of operation 'shuffle'
-#   - removed data type storing
-#   - collapsed the output arguments into a single argument
-#   - collapsed the rotation center arguments for 'mirror' into a single argument
-#   - minor code rearranging to improve code visualization
-#- cubestat
-#   - improved functionality. Now can take a dictionary (like the configuration file) as input and updates it with the missing information
-#   - added fluxrange option for rms calculation
-#   - removed rms and sensitivity error computation
-#   - rewritten the outputs
-#   - minor code rearranging to improve code visualization
-#- fitsarith
-#   - improved data import
-#   - rewritten the outputs
-#   - collapsed the output arguments into a single argument
-#   - minor code rearranging to improve code visualization
-#- fixmask
-#   - collapsed the output arguments into a single argument
-#   - minor code rearranging to improve code visualization
-#- gaussfit
-#   - fixed mask import
-#   - fixed spectral axis calculation if the spectral resolution is negative
-#   - improved mandatory inputs retrival and check
-#   - improved fitting routine
-#   - added option to fit a double component
-#   - collapsed the output arguments into a single argument
-#   - minor code rearranging to improve code visualization
 #- getpv
-#   - improved mandatory input retrival and check
-#   - improved figure size
-#   - added fluxrange option for rms calculation
-#   - added option to choose the colormap
-#   - added option to choose the contours colormap
-#   - removed the option to save the plot
-#   - removed the suptitle option
-#   - removed objname from the kwargs
-#   - collapsed the output arguments into a single argument
-#   - minor code rearranging to improve code visualization
-#- lines finder
-#   - fixed SNR calculation
-#   - fixed error when providing list of spectra but a single rms value
-#   - improved the setup for the reliability calculation
-#   - improved the processing of the reliability outcomes
-#   - improved the linker
-#   - improved the reliability calculation
-#   - added the mean and the median of the spectrum to the source catalogue
-#   - collapsed the output arguments into a single argument
+#   - output folder checked only if plot or fits must be saved
+#- lines_finder
+#   - added reliability parameter values to the source catalogue
+#   - added removal from the detection mask of non-reliable sources
+#   - improved the linker (changed to __source_linker_new)
+#   - fixed SNR value in the source catalogue
+#   - changed default value of keep_negative to False
 #- noise_variations
-#   - fixed error when a glitchy pixel is in the cube
-#   - improved plots
-#   - added fluxrange option for rms calculation
-#   - added noise cube as fits and spectral variations as csv to the outputs
-#   - added arguments to import_parameters
-#   - added arguments to create_config
+#   - fixed error when spectral rms contains 0s
 #- plotmom
-#   - fixed error on beamarea convertion to arcsec if no beam is given
-#   - improved visualization if a single map is plotted
-#   - improved figure size
-#   - improved subplots positioning
-#   - improved automatic countours calculation for moment 0 map
-#   - improved moment 0 colorbar tick labels
-#   - improved default colormaps (moment 1 and moment 2)
-#   - improved conotur colors and visualization (moment 1 and moment 2)
-#   - added countour levels to the colobars
-#   - removed the option to save the plot
-#   - removed the option to use the data cube, as this will be done automatically if necessary
-#   - collapsed the output arguments into a single argument
-#   - minor code rearranging to improve code visualization
-#- removemod
-#   - collapsed the output arguments into a single argument
-#   - minor code rearranging to improve code visualization
+#   - fixed error when converting deg to arcsec when no beam is provided
+#   - fixed error in colorbar display when no column density is calculated
 #- rotcurve
-#   - collapsed the output arguments into a single argument
+#   - fixed error when pa is negative
 #- stacking
-#   - fixed median periodicity plot
-#   - improved y-axis label of stacked spectra
-#   - collapsed the output arguments into a single argument
-#- velfi
-#   - collapsed the output arguments into a single argument
-#- import_parameters
-#   - changed imports according to changes in the above functions
-#- create_config
-#   - fixed typos
-#   - improved and fixed descriptions
-#   - changed according to changes in the above functions
-#- flux
-#   - fixed error due to wrong variable naming
-#   - fixed box loading when input data is a string
-#- getHImass
-#   - fixed box loading when input data is a string
-#   - minor code rearranging to improve code visualization
+#   - added call of noise_variations on the shuffled cube in diagnostic mode
+#   - added the option to regrid the cube prior stacking
+#   - improved control on the diagnostic outputs
+#   - fixed error if nregions has no integer root
+#   - fixed pixel assignment when region shape is cell
+#   - fixed name of numpy outputs
+#   - fixed x-axis being flipped in the stacked spectrum plot
+#   - fixed channels being flipped in the source catalogue
+#   - changed the detection map default value to 0
+#- __assign_to_cells
+#   - fixed pixel assignment
+#   - fixed output when a name and not a path+name is provided
 #- __plot_stack_spectrum
-#   - improved y-axis label of stacked spectra
+#   - fixed mask usage if input mask is None
+#   - fixed error if input spectrum is all 0
 #- __source_linker
-#   - (!!! SE USI QUELLO VECCHIO!!!) improved performance
-#   - (!!! SE USI QUELLO NUOVO!!!) completely rewritten. Now acts as the one in SoFiA2
-#- __reliability (RENAMED)
-#   - completely rewritten. Now acts as the one in SoFiA2
-#   - added the Skellam diagnostic plot
-#-  __rms (RENAMED)
-#   - this function now handles the fluxrange. All the other functions, which were using the fluxrange argument, have been changed accordingly
-#- (NEW) __covariance_to_error_ellipse
-#- (REMOVED) __get_sources_type
-#- improved memory management of large (>1 Gb) fits file by reverting the memory mapping of astropy to True and brute force delete the mapped memory when the fits is closed
-#- created custom colormaps for the moment 1, moment 2 and moment 2 contours
-#- the margins for plotting the ancillary information are now controlled through the configuration file in all the plotting functions
-#- changed strings in f-strings
-#- minor fixes
+#   - is now the former __source_linker_new
+#- __stack
+#   - disabled the fied y-limits
 #- improved documentation
 #
 #   TO DO:  - sistema i docstrings delle private functions
@@ -153,6 +63,7 @@ from astropy.visualization import hist
 from pvextractor import Path
 from pvextractor import PathFromCenter
 from pvextractor import extract_pv_slice
+from reproject import reproject_interp as reproj
 from scipy.special import erf
 from scipy.stats import chi2 as statchi2
 from scipy.stats import anderson
@@ -389,7 +300,7 @@ def import_parameters(parameter_file=''):
     parameters['rel_threshold']=config.getfloat('LINESFINDER','rel_thresh',fallback=0) #minimum value (from 0 to 1) of the reliability to consider a source reliable. Set to 0 to disable the reliability calculation. If it is not given, set it to 0
     parameters['rel_kernel']=config.getfloat('LINESFINDER','rel_kernel',fallback=0.4) #scaling factor for the size of the Gaussian kernel used when estimating the density of positive and negative detections in the reliability parameter space.. If it is not given, set it to 0.4
     parameters['rel_snrmin']=config.getfloat('LINESFINDER','rel_snrmin',fallback=3) #minimum SNR of a detected line to be reliable. If it is not given, set it to 3
-    parameters['keep_negative']=config.getboolean('LINESFINDER','negative',fallback=True) #don't discard detections with negative flux at the end of the process. If it is not given, set it to True    
+    parameters['keep_negative']=config.getboolean('LINESFINDER','negative',fallback=False) #don't discard detections with negative flux at the end of the process. If it is not given, set it to False    
     parameters['gaussianity']=config.getboolean('LINESFINDER','gauss_tests',fallback=False) #if set to True, two statistical tests (Anderson-Darling and Kanekar) will be performed to quantify the gaussianity of the noise in the input spectra. If not given, set it to False
     parameters['p_value']=config.getfloat('LINESFINDER','p-value',fallback=0.05) #p-value threshold of the Anderson-Darling test to reject non-Gaussian spectra (a spectrum has Gaussian noise if p>p_value). If not given, set it to 0.05  
     parameters['kanekar_threshold']=config.get('LINESFINDER','kanekar').split(',') if config.has_option('LINESFINDER','kanekar') else [0.8,1.16] #an array like of two float elements representing the minimum and maximum value of the Kanekar test to reject non-Gaussian spectra (a spectrum has Gaussian noise if kanekar_min<test_value<kanekar_max). If not given, set it to None
@@ -547,6 +458,8 @@ def chanmap(datacube='',from_chan=None,to_chan=None,chansep=None,chanmask=False,
     if output[0]=='.': #if the output name start with a . means that it contains a path
         path=''.join(a+'/' for a in output.split('/')[:-1]) #recover the path from the output string
         if not os.path.exists(path): os.makedirs(path) #create the folder if the output folder does not exist
+    else:
+        output=kwargs['path']+output if 'path' in kwargs else os.getcwd()+output
     #CHECK THE KWARGS#
     pixunits=kwargs.get('pixunits',None) #store the spatial units
     if pixunits not in [None,'deg','arcmin','arcsec']: #if wrong spatial units are given
@@ -842,7 +755,8 @@ def cubedo(cubedo='',operation=None,chanmin=None,chanmax=None,inbox=None,addchan
         if output[0]=='.': #if the output name start with a . means that it contains a path
             path=''.join(a+'/' for a in output.split('/')[:-1]) #recover the path from the output string
             if not os.path.exists(path): os.makedirs(path) #create the folder if the output folder does not exist
-    
+        else:
+            output=kwargs['path']+output if 'path' in kwargs else os.getcwd()+output
     #---------------   START THE FUNCTION   ---------------#
     data,header=__load(datacube) #load the datacube
         
@@ -1236,7 +1150,8 @@ def fitsarith(path='',fits1='',fits2='',do=None,fits_out='',**kwargs):
     if output[0]=='.': #if the output name start with a . means that it contains a path
         path=''.join(a+'/' for a in output.split('/')[:-1]) #recover the path from the output string
         if not os.path.exists(path): os.makedirs(path) #create the folder if the output folder does not exist
- 
+    else:
+        output=kwargs['path']+output if 'path' in kwargs else os.getcwd()+output
     #---------------   START THE FUNCTION   ---------------#
     data1,header=__load(fits1) #open the first fits file
     data2,_=__load(fits2) #open the second fits file
@@ -1353,6 +1268,8 @@ def gaussfit(cubetofit='',gaussmask='',components=1,linefwhm=15,amp_thresh=0,p_r
     if output[0]=='.': #if the output name start with a . means that it contains a path
         path=''.join(a+'/' for a in output.split('/')[:-1]) #recover the path from the output string
         if not os.path.exists(path): os.makedirs(path) #create the folder if the output folder does not exist
+    else:
+        output=kwargs['path']+output if 'path' in kwargs else os.getcwd()+output
     #CHECK THE KWARGS#
     specunits=kwargs.get('specunits',None) #store the spectral units
     spectralres=kwargs.get('spectralres',None) #store the spectral resolution
@@ -1571,13 +1488,15 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=1,pvchmax=No
         pvangle=(180+pvangle)*u.degree #convert it due to position angle definition of pvextractor
     chmin=pvchmin #store the lower channel from the input parameters
     chmax=pvchmax #store the upper channel from the input parameters
-    output=pv_out+plot_format #store the output directory/name from the input parameters
-    if output in ['',None]: #if no output is provided
-        raise ValueError('ERROR: no output name set: aborting')
-    if output[0]=='.': #if the output name start with a . means that it contains a path
-        path=''.join(a+'/' for a in output.split('/')[:-1]) #recover the path from the output string
-        if not os.path.exists(path): os.makedirs(path) #create the folder if the output folder does not exist
-        
+    if saveplot or write_fits: #if the plot must be saved or the fits written
+        output=pv_out+plot_format #store the output directory/name from the input parameters
+        if output in ['',None]: #if no output is provided
+            raise ValueError('ERROR: no output name set: aborting')
+        if output[0]=='.': #if the output name start with a . means that it contains a path
+            path=''.join(a+'/' for a in output.split('/')[:-1]) #recover the path from the output string
+            if not os.path.exists(path): os.makedirs(path) #create the folder if the output folder does not exist
+        else:
+            output=kwargs['path']+output if 'path' in kwargs else os.getcwd()+output    
     #CHECK THE KWARGS#
     pixunits=kwargs.get('pixunits',None) #store the spatial units
     if pixunits not in [None,'deg','arcmin','arcsec']: #if wrong spatial units are given
@@ -1672,7 +1591,7 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=1,pvchmax=No
             print('Extracting the pv slice with the following parameters:\n'
             f'Spatial resolution: {pixelres:.1f} arcsec\n'
             f'Path length: {length:.1f}\n'
-            f'Path position angle: {pvangle:.1f} deg\n'
+            f'Path position angle: {pvangle:.1f}\n'
             f'Path width: {pvwidth:.1f}\n'
             f'From channel {chmin+1} to channel {chmax-1}\n'
             '-------------------------------------------------')
@@ -1682,7 +1601,7 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=1,pvchmax=No
             f'Path width: {pvwidth:.1f}\n'
             f'From channel {chmin+1} to channel {chmax-1}\n'
             '-------------------------------------------------')
-            
+     
     #EXTRACT THE PVSLICE AND REFER THE SPATIAL AXIS TO THE SLICE CENTER#    
     pv=extract_pv_slice(data[chmin:chmax,:,:],pvpath,wcs=wcs[chmin:chmax,:,:]) #extract the pv slice
     pv.header['CRPIX1']=round(pv.header['NAXIS1']/2)+1 #fix the header in order to have the distance from the center as spatial dimension
@@ -1767,7 +1686,7 @@ def getpv(pvcube='',pvwidth=None,pvpoints=None,pvangle=None,pvchmin=1,pvchmax=No
         return pv #return the pvslice
         
 #############################################################################################
-def lines_finder(spectrum=None,spectrum_rms=None,smooth_kernel=None,sc_threshold=3,sc_replace=2,sc_fluxrange='negative',sc_statistics='mad',link_kernel=3,min_size=3,rel_threshold=0,rel_kernel=0.4,rel_snrmin=3,keep_negative=True,gaussianity=False,write_catalogue=False,finder_out='',**kwargs):
+def lines_finder(spectrum=None,spectrum_rms=None,smooth_kernel=None,sc_threshold=3,sc_replace=2,sc_fluxrange='negative',sc_statistics='mad',link_kernel=3,min_size=3,rel_threshold=0,rel_kernel=0.4,rel_snrmin=3,keep_negative=False,gaussianity=False,write_catalogue=False,finder_out='',**kwargs):
     """One-dimensional source finding algorithm for spectral lines detection. It resembles the The Source Finding Application, SoFiA (Serra et al. 2015, Westmeier et al. 2021).
 
     Args:
@@ -1778,8 +1697,8 @@ def lines_finder(spectrum=None,spectrum_rms=None,smooth_kernel=None,sc_threshold
         sc_replace (float): Before smoothing the spectrum during each source finder iteration, any flux value that was already detected in a previous iteration will be replaced by this value multiplied by the original noise level in the non-smoothed data cube. The original sign of the data value is preserved. Specify a value less than 0 to disable this feature.
         sc_fluxrange (str): The flux range used in the noise measurement of the source finder. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artifacts from affecting the noise measurement. If set to any other value, all pixels will be used in the noise measurement irrespective of their flux.
         sc_statistics (str): The statistic used in the noise measurement process of the source finder. Possible values are 'std' for standard deviation and 'mad' for median absolute deviation. Standard deviation is faster but less robust in the presence of emission or artifacts. Median absolute deviation is more robust in such cases.
-        link_kernel (int): The minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker.
-        min_size (int): The minimum number of channels a source can cover.
+        link_kernel (int): The maximum merging length. Detections with a separation of up to this value will be merged into the same source.
+        min_size (int): The minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker.
         rel_threshold (float): The reliability threshold in the range of 0 to 1. Sources with a reliability below this threshold will be discarded.
         rel_kernel (float): Scaling factor for the size of the Gaussian kernel used when estimating the density of positive and negative detections in the reliability parameter space.
         rel_snrmin (float): The lower signal-to-noise limit for reliable sources. Detections below this threshold will be classified as unreliable and discarded. The integrated signal-to-noise ratio (SNR) of a source is calculated as SNR = Fsum / (RMS * sqrt(N)), where Fsum is the summed flux density, RMS is the local RMS noise level (assumed to be constant), and N is the number of channels of the source. The spectral resolution is assumed to be equal to the channel width.
@@ -1823,7 +1742,7 @@ def lines_finder(spectrum=None,spectrum_rms=None,smooth_kernel=None,sc_threshold
         path=''.join(a+'/' for a in output.split('/')[:-1]) #recover the path from the output string
         if not os.path.exists(path): os.makedirs(path) #create the folder if the output folder does not exist
     else:
-        path=os.getcwd() #get the current working directory
+        output=kwargs['path']+output if 'path' in kwargs else os.getcwd()+output
     #CHECK THE KWARGS#    
     p_value=kwargs.get('finder_p_value',0.05) #store the Anderson-Darling p-value threshold
     kanekar_threshold=kwargs.get('kanekar_threshold',[0.79,1.16]) #store the Kanerkar value threshold
@@ -1942,10 +1861,6 @@ def lines_finder(spectrum=None,spectrum_rms=None,smooth_kernel=None,sc_threshold
         
         if verbose:
             print(f'Detected reliable sources : {len(reliable_ids)}')
-        ## THIS PART DOESN'T WORK. YOU HAVE TO DECIDE IF YOU WANT TO SHOW IN THE STACKED SPECTRA PLOTS ONLY THE RELIABLE SOURCES (IN WHICH CASE YOU HAVE TO FIX THIS PART) OR ALL THE DETECTION (IN WHICH CASE REMOVE THIS PART)
-        #non_rel_idx=np.where(reliability<rel_threshold)[0]+1 #find the index of the non reliable sources. +1 is needed because python counts from 0. reliability is an array of length equal to the number of positive sources. The first element is the first positive source, which has an index of 1.
-        #for idx in non_rel_idx: #blank the non reliable sources
-        #    mask[np.where(mask==idx)[0]]=np.nan #the mask contains positive values (indexes of the positive sources) and negative values. I know the indexes of the non-reliable positive values, hence I can blank them
     else:
         reliable_ids=None
         
@@ -1954,12 +1869,15 @@ def lines_finder(spectrum=None,spectrum_rms=None,smooth_kernel=None,sc_threshold
         #to efficiently create the catalogue, we create each row as a list and append all rows to a list. 
         #Then, we convert the list of list, where list[0] is the row 0, into a dataframe
         catalogue=[] #initialize the catalogue as list (will become a list of list)
-        colnames=['Spectrum ID','Source ID','Channel min','Channel max','Channels','Flux','Rms','Flux density','Mean','Median'] #names of the catalogue columns
+        colnames=['Spectrum ID','Source ID','Channel min','Channel max','Channels','Flux','Rms','SNR','Mean','Median'] #names of the catalogue columns
         if gaussianity:
             colnames.append('Anderson test')
             colnames.append('Kanekar test')
         if rel_threshold>0:
             colnames.append('Reliability')
+            colnames.append('Log(Sum)')
+            colnames.append('Log(Peak)')
+            colnames.append('Log(Mean)')
             k=0 #initialize the reliabile source counter
         for i in range(len(spectrum)): #run over the spectra and extract the sources
             if not np.all(np.isnan(source_ids[i])): #if there are sources in the spectrum i
@@ -1972,10 +1890,10 @@ def lines_finder(spectrum=None,spectrum_rms=None,smooth_kernel=None,sc_threshold
                         row.append(chanmin) #source channel min
                         chanmax=np.nanmax(np.where(source_ids[i]==j)[0])+1
                         row.append(chanmax) #source channel max
-                        row.append(chanmax-chanmin+1) #source channels. +1 is needed: if a source starts at channel 4 and ends at channel 6, it covers  6-4+1=3 channels, not 6-4=2 channels
+                        row.append(len(np.where(source_ids[i]==j)[0])) #source channels
                         row.append(np.nansum(spectrum[i][source_ids[i]==j])) #source flux
                         row.append(spectrum_rms[i]) #source rms
-                        row.append(np.nansum(spectrum[i][source_ids[i]==j])/(np.sqrt((chanmax-chanmin+1))*spectrum_rms[i])) #source flux density: total flux / (N channels*rms)
+                        row.append(np.nansum(spectrum[i][source_ids[i]==j])/(np.sqrt(len(np.where(source_ids[i]==j)[0]))*spectrum_rms[i])) #source flux density: total flux / (sqrt(N) channels*rms)
                         row.append(np.nanmean(spectrum[i])) #spectrum mean
                         row.append(np.nanmedian(spectrum[i])) #spectrum median
                         if gaussianity:
@@ -1983,9 +1901,17 @@ def lines_finder(spectrum=None,spectrum_rms=None,smooth_kernel=None,sc_threshold
                             row.append(g_test_list[i]) #gaussianity test value
                         if rel_threshold>0:
                             if j>0: #if a positive source
+                                if reliability[k+j-1]<rel_threshold: #if the source is not reliable
+                                    mask_list[i][chanmin-1:chanmax]=np.nan #remove it from the detection mask
                                 row.append(reliability[k+j-1]) #append its reliability value. -1 is needed because at the beginning, j=1 and k=0 so j+k=1 and not 0 as it should be.
+                                row.append(np.log10(np.nansum(spectrum[i][source_ids[i]==j]/spectrum_rms[i]))) #source sum
+                                row.append(np.log10(np.nanmax(spectrum[i][source_ids[i]==j]/spectrum_rms[i]))) #source peak
+                                row.append(np.log10(np.nanmean(spectrum[i][source_ids[i]==j]/spectrum_rms[i]))) #source mean
                             else: #if a negative source
                                 row.append(0) #append 0
+                                row.append(np.log10(-np.nansum(spectrum[i][source_ids[i]==j]/spectrum_rms[i]))) #source sum
+                                row.append(np.log10(-np.nanmin(spectrum[i][source_ids[i]==j]/spectrum_rms[i]))) #source peak
+                                row.append(np.log10(-np.nanmean(spectrum[i][source_ids[i]==j]/spectrum_rms[i]))) #source mean
                         catalogue.append(row) #append the row to the catalogue
                 if rel_threshold>0:
                     if j>0: #if the last value of j is positive (can be negative if spectrum i has only negative sources
@@ -1999,7 +1925,7 @@ def lines_finder(spectrum=None,spectrum_rms=None,smooth_kernel=None,sc_threshold
         catalogue.to_csv(finder_out+'_sources_catalogue.csv',index=False) #remove sources in non-Gaussian spectra
         filtered_catalogue.to_csv(finder_out+'_sources_catalogue_filtered.csv',index=False)   
 
-    return mask_list,smooth_rms_list,reliable_ids
+    return mask_list,smooth_rms_list,reliable_ids,source_ids
 
 #############################################################################################
 def noise_variations(datacube='',nv_statistics='mad',nv_fluxrange='negative',noise_out='',**kwargs):
@@ -2013,7 +1939,12 @@ def noise_variations(datacube='',nv_statistics='mad',nv_fluxrange='negative',noi
         
     Kwargs:
         path (str): Path to the data cube if the datacube is a name and not a path+name.
-        fluxunits (str): Flux units of the data (Default: None).
+        specunits (str): String with the spectral units (Default: None). Accepted values:
+            - None (it will try to retrieve them from the cube header)
+            - km/s
+            - m/s
+            - Hz
+        spectralres (float): Cube spectral resolution in specunits (Default: None).
         plot_format (str): File format of the plots (Default: pdf).
         verbose (bool): If True, print messages to the terminal (Default: False).
     
@@ -2034,6 +1965,8 @@ def noise_variations(datacube='',nv_statistics='mad',nv_fluxrange='negative',noi
     if output[0]=='.': #if the output name start with a . means that it contains a path
         path=''.join(a+'/' for a in output.split('/')[:-1]) #recover the path from the output string
         if not os.path.exists(path): os.makedirs(path) #create the folder if the output folder does not exist
+    else:
+        output=kwargs['path']+output if 'path' in kwargs else os.getcwd()+output
     #CHECK THE KWARGS#
     specunits=kwargs.get('specunits',None) #store the spectral units
     if specunits not in [None,'km/s','m/s','Hz']: #if wrong spatial units are given
@@ -2100,7 +2033,7 @@ def noise_variations(datacube='',nv_statistics='mad',nv_fluxrange='negative',noi
         print('Doing some fancy plots\n----------------------------------------------') 
     fig=plt.figure(figsize=(8,4)) #create the figure for the frequency-dependence of the rms
     ax=fig.add_subplot() #create the subplot for the rms
-    exponent=int(np.nanmean(np.log10(spectral_rms[~np.isnan(spectral_rms)]))) #mean power of the rms values
+    exponent=int(np.nanmean(np.log10(np.abs(spectral_rms[np.where((~np.isnan(spectral_rms)) & (spectral_rms != 0))])))) #mean power of the rms values
     ax.plot(channels,spectral_rms/10**exponent,c='blue',lw=2)
     ax.set_xlabel('Channel') #set the x-axis label
     ax.set_ylabel(fr'RMS [$\mathdefault{{10^{{{exponent}}}}}$ $\mathdefault{{{fluxunits}}}$]') #set the y-axis label
@@ -2147,7 +2080,6 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmom_out='',**kwargs
         mom1map (str/ndarray): Name or path+name of the FITS moment 1 map.
         mom2map (str/ndarray): Name or path+name of the FITS moment 2 map.
         plotmom_out (str): The output folder/file name.
-        save (bool): Saves the plot if True.
 
     Kwargs:
         path (str): Path to the moment map if momXmap is a name and not a path+name.
@@ -2224,12 +2156,15 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmom_out='',**kwargs
     if which in ['all','mom2']: #if all moment maps must be plotted or only the moment 2 map
         if type(mom2map)==str or mom2map is None: #if the moment 2 map is a string
             mom2map=__read_string(mom2map,'mom2map',**kwargs) #store the path to the moment 2 map
-    output=plotmom_out+plot_format #store the output directory/name from the input parameters
-    if output in ['',None]: #if no output is provided
-        raise ValueError('ERROR: no output name set: aborting')
-    if output[0]=='.': #if the output name start with a . means that it contains a path
-        path=''.join(a+'/' for a in output.split('/')[:-1]) #recover the path from the output string
-        if not os.path.exists(path): os.makedirs(path) #create the folder if the output folder does not exist
+    if which == 'all':
+        output=plotmom_out #store the output directory/name from the input parameters
+        if output in ['',None]: #if no output is provided
+            raise ValueError('ERROR: no output name set: aborting')
+        if output[0]=='.': #if the output name start with a . means that it contains a path
+            path=''.join(a+'/' for a in output.split('/')[:-1]) #recover the path from the output string
+            if not os.path.exists(path): os.makedirs(path) #create the folder if the output folder does not exist
+        else:
+            output=kwargs['path']+output if 'path' in kwargs else os.getcwd()+output
     #CHECK THE KWARGS#
     pixunits=kwargs.get('pixunits',None) #store the spatial units
     if pixunits not in [None,'deg','arcmin','arcsec']: #if wrong spatial units are given
@@ -2384,12 +2319,12 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmom_out='',**kwargs
         disp=np.nanmedian(mom2) #calculate the median velocity dispersion
     
     #CONVERT THE BEAM TO ARCSEC
-    if pixunits == 'deg': #if the spatial units are deg
+    if pixunits == 'deg' and bmaj!=None: #if the spatial units are deg
         bmaj*=3600 #convert the beam major axis in arcsec
         bmin*=3600 #convert the beam minor axis in arcsec
         if which == 'all' or which == 'mom0': #if all moment maps or moment 0 map must be plotted
             beamarea*=3600**2 #convert the beam area in arcsec
-    elif pixunits == 'arcmin': #if the spatial units are arcmin
+    elif pixunits == 'arcmin' and bmaj!=None: #if the spatial units are arcmin
         bmaj*=60 #convert the beam major axis in arcsec
         bmin*=60 #convert the beam minor axis in arcsec
         if which == 'all' or which == 'mom0': #if all moment maps or moment 0 map must be plotted
@@ -2460,7 +2395,8 @@ def plotmom(which='all',mom0map='',mom1map='',mom2map='',plotmom_out='',**kwargs
         cb=fig.colorbar(im,ax=ax,location='top',pad=0.0,fraction=0.0476) if which == 'all' else fig.colorbar(im,ax=ax,location='top',pad=0.0,fraction=0.0476) #add the colorbar on top of the plot
         cb.set_label(fr'HI column density [$\mathdefault{{10^{{{exponent}}}}}$ $\mathdefault{{cm^{{-2}}}}$]') if momunit == 'cm$^{-2}$' else f'Flux [{momunit}]' #set the colorbar labeld
         cb.set_ticks(ctr) #set the ticks of the colobar to the levels of the contours
-        cb.ax.set_xticklabels([f'{i/10**exponent:.1f}' for i in cb.get_ticks()]) #set ticks in a nice format
+        if momunit == 'cm$^{-2}$':
+            cb.ax.set_xticklabels([f'{i/10**exponent:.1f}' for i in cb.get_ticks()]) #set ticks in a nice format
         for tick,color in zip(np.power(cb.get_ticks(),norm.gamma)*norm.vmax**(1-norm.gamma), plt.cm.get_cmap(mom0_ctrmap)(norm(cb.get_ticks()))): #we want to assign the color of the countour levels to the correspondong tick. We use np.power(...) to convert the tick into the normalized value. We cannot call norm() because in that case vmax is hardcoded to 1. Hence, we have to manually calculate it. Then, plt.cm.get_cmap(...) is used to retrieve the color of the colormap corresponding to the position of the tick
             cb.ax.axvline(tick,c=color,lw=ctr_width) #create the line
         #ADD ANCILLARY INFORMATION#
@@ -2650,6 +2586,8 @@ def removemod(datacube='',modelcube='',maskcube=None,method='subtraction',blankt
     if output[0]=='.': #if the output name start with a . means that it contains a path
         path=''.join(a+'/' for a in output.split('/')[:-1]) #recover the path from the output string
         if not os.path.exists(path): os.makedirs(path) #create the folder if the output folder does not exist
+    else:
+        output=kwargs['path']+output if 'path' in kwargs else os.getcwd()+output
     #---------------   START THE FUNCTION   ---------------#    
     data,header=__load(datacube) #open the data cube
     model,_=__load(modelcube) #open the model cube
@@ -2739,6 +2677,8 @@ def rotcurve(vfield='',pa=None,rotcenter=None,rotcurve_out='',save_csv=False,**k
     if output[0]=='.': #if the output name start with a . means that it contains a path
         path=''.join(a+'/' for a in output.split('/')[:-1]) #recover the path from the output string
         if not os.path.exists(path): os.makedirs(path) #create the folder if the output folder does not exist
+    else:
+        output=kwargs['path']+output if 'path' in kwargs else os.getcwd()+output
     #CHECK THE KWARGS#
     vsys=kwargs.get('vsys',None)
     pixunits=kwargs.get('pixunits',None)
@@ -2786,7 +2726,7 @@ def rotcurve(vfield='',pa=None,rotcenter=None,rotcurve_out='',save_csv=False,**k
     #we parameterize the major axis with a line y=tan(pa)*x+q
     #once we have the length r of the major axis on the full image (i.e., not limited to the size of the galaxy), we can recover the rotation curve by using x=r*cos(pa)+xmin and y=r*sin(pa)+ymin
     #from basic trigonometry, we can recover the x and y range
-    if pa == np.radians(0) or pa == np.radians(180): #if the position angle is 'horizontal'
+    if pa == np.radians(0) or np.abs(pa) == np.radians(180): #if the position angle is 'horizontal'
         xmin=0 #xmin is 0
         xmax=data.shape[1]-1 #xmax is the x-size of the image. -1 accounts for python 0-indexing
         ymin=y0 #ymin is the y-coordinate of the rotational center
@@ -2796,7 +2736,7 @@ def rotcurve(vfield='',pa=None,rotcenter=None,rotcurve_out='',save_csv=False,**k
         xmax=data.shape[1]-1 #xmax is the x-size of the image. -1 accounts for python 0-indexing
         ymin=0 #ymin is 0
         ymax=data.shape[0]-1 #ymax is the y-size of the image. -1 accounts for python 0-indexing
-    elif pa == np.radians(90) or pa == np.radians(270): #if the position angle is 'vertical'
+    elif np.abs(pa) == np.radians(90) or np.abs(pa) == np.radians(270): #if the position angle is 'vertical'
         xmin=x0 #xmin is the x-coordinate of the rotational center
         xmax=x0 #xmax is the x-coordinate of the rotational center
         ymin=0 #ymin is 0
@@ -2826,51 +2766,47 @@ def rotcurve(vfield='',pa=None,rotcenter=None,rotcurve_out='',save_csv=False,**k
     y=np.arange(round(r))*np.abs(np.sin(pa))+ymin #define the y-axis
     if np.radians(90) < pa < np.radians (180) or np.radians(270) < pa < np.radians(360): #for that values of pa, y decreases as x increases; hence, flip the y-axis
         y=np.flip(y) #flip the y-axis to go from ymax to ymin
-
     rotcurve=data[y.astype(int)-1,x.astype(int)-1]-vsys #extract the rotation curve
-
+    
     if pixelres is None: #if no pixel resolution is given
         radius=np.sqrt((x-x0)**2+(y-y0)**2) #radius from center in pixel
         units='pixel' #set the units to pixel
     else:
         radius=np.sqrt((x-x0)**2+(y-y0)**2)*pixelres  #radius from center in pixunits
         units=f'{pixunits}' #set the units to pixunits
-    radius[rotcurve<=0]=-radius[rotcurve<=0] #set to negative values the radii of receding velocities
-    
+        
     recradius=radius[rotcurve>=0] #get the radius of the receding velocities
     appradius=radius[rotcurve<=0] #get the radius of the approaching velocities
     rec=rotcurve[rotcurve>=0] #store the receding rotation curve
     app=rotcurve[rotcurve<=0] #store the approaching rotation curve
-    
-    if np.cos(pa) < 0: #for those pa, the higher/lower receding/approaching velocity will be sampled first
+
+    if np.cos(pa) > 0: #for those pa, the higher/lower receding/approaching velocity will be sampled first
         rec=np.flip(rec) #flip the receding velocities sothat the first element is 0
         recradius=np.flip(recradius) #flip the receding radii sothat the first element is 0
     else: #for those pa, the lower/higher receding/approaching velocity will be sampled first
         app=np.flip(app) #flip the approaching velocities sothat the first element is 0
         appradius=np.flip(appradius) #flip the approaching radii sothat the first element is 0
-  
-    if np.nanmin(np.abs(appradius)) < np.nanmin(recradius): #by definition, at radius = 0 the rotation velocity is 0.
-        #However, it is almost impossible to have a 0 radius, hence, the lowest value of radius should be considered as 0.
-        #This radius belongs to the approaching or receding side, consequently, to the other should be added a radius = 0.
-        recradius=np.append(0,recradius)
-        rec=np.append(0,rec)
-    else:
-        appradius=np.append(0,appradius)
-        app=np.append(0,app)
-      
+    
+    if np.nanmin(recradius) < np.nanmin(appradius):
+        appradius=np.insert(appradius,0,np.nanmin(recradius))
+        app=np.insert(app,0,np.nanmin(rec))
+    elif np.nanmin(recradius) > np.nanmin(appradius):
+        recradius=np.insert(recradius,0,np.nanmin(appradius))
+        rec=np.insert(rec,0,np.nanmax(app))
+    
     #we want to calculate the mean rotation curve, so we have to equal the size of the approaching and receding rotation curves
     if len(app) > len(rec): #if the approaching side is larger
-        newapp=app #store a dummy variable used for csv
+        newapp=app.copy() #store a dummy variable used for csv
         diff=len(app)-len(rec) #calculate how much larger it is
         toadd=np.zeros(diff)*np.nan #create a nans array with size equal to the difference
         newrec=np.concatenate((rec,toadd)) #append the nans to the receding rotation curve
-        newradius=appradius #the total radius is the one of the approaching side
+        newradius=appradius.copy() #the total radius is the one of the approaching side
     elif len(app) < len(rec): #if the receding side is larger
-        newrec=rec #store a dummy variable used for csv
+        newrec=rec.copy() #store a dummy variable used for csv
         diff=len(rec)-len(app) #calculate how much larger it is
         toadd=np.zeros(diff)*np.nan #create a nans array with size equal to the difference
         newapp=np.concatenate((app,toadd)) #append the nans to the approaching rotation curve
-        newradius=recradius #the total radius is the one of the receding side
+        newradius=recradius.copy() #the total radius is the one of the receding side
     else:
         newradius=np.nanmean((appradius,recradius),axis=0) #the radius is given by the mean of the approacing and receding radii
         newapp=app #copy the approaching rotation curve
@@ -2930,7 +2866,7 @@ def rotcurve(vfield='',pa=None,rotcenter=None,rotcurve_out='',save_csv=False,**k
         plt.close()
 
 #############################################################################################
-def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,shape='cones',nregions=None,from_to=None,between_angles=None,weighting=None,stack_fluxrange='negative',stack_statistics='mad',diagnostic=False,periodicity=False,save_numpy=False,stack_out='',**kwargs):
+def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,shape='cones',nregions=None,from_to=None,between_angles=None,weighting=None,stack_fluxrange='negative',stack_statistics='mad',pix_scale=0,diagnostic=False,periodicity=False,save_numpy=False,stack_out='',**kwargs):
     """Stack the spectra extracted from a given number of regions around a center starting from a minimum radius up to a maximum radius. Afterwards, it runs a source-finding algorithm on each stacked spectrum to check for detected lines. It optionally stores diagnostic plots of the stacking and the source-finding routines and also optionally stores relevant diagnostic fits file of the source-finding routine.
 
     Args:
@@ -2952,7 +2888,8 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
             - rms: The stacked spectrum will be averaged with the square of the rms of each stacked spectrum.
         stack_fluxrange (str): Flux range to be used in the noise measurement of the source finder. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artifacts from affecting the noise measurement. If set to anything else, all pixels will be used in the noise measurement irrespective of their flux.
         stack_statistics (str): Statistic to be used in the noise measurement process of the source finder. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is the fastest algorithm but the least robust one with respect to emission and artifacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artifacts.
-        diagnostic (bool): Store all the diagnostic files and plots. Warning: the diagnostic might occupy large portions of the disk (default: False).
+        pix_scale (int): New pixel size to regrid the cube. This number will multiply the native pixel resolution. If lower or equal to 1, regriding will be disabled (default: 1)
+        diagnostic (str): Store all the diagnostic fits and/or plots. Selecting 'fits' will store the fits file of the masked, shuflled and regrid cube as well as the noise variations of the data. Choose 'plots' to store the diagnostic plots showing the stacked spectrum after every co-addition. Use 'all' to store everything. 'false' or anything else will disable the diagnostic. Warning: the diagnostic might occupy large portions of the disk (default: 'false').
         save_numpy (bool): Store the stacked spectra and stacked rms array in the disk. Useful to calibrate the source finder without re-run each time the stacking (default: False).
         stack_out (str): The output folder/file name.
         
@@ -3033,20 +2970,21 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
             periodicity_output=path+'periodicity_plots/' #create the directory for the stacked spectra plots
             if not os.path.exists(periodicity_output): #if the output folder does not exist
                 os.makedirs(periodicity_output) #create the folder  
-        if diagnostic: #if the diagnostic option is true
+        if diagnostic in ['all','fits']: #if the diagnostic option is set to store the fits files
             diagnostic_output=path+'diagnostic/'
             if not os.path.exists(diagnostic_output): #if the output folder does not exist
                 os.makedirs(diagnostic_output) #create the folder
     else: #if the output is a name
-        plots_output=os.getcwd()+'stacked_spectra/' #create the directory for the stacked spectra plots
+        output=kwargs['path']+output if 'path' in kwargs else os.getcwd()+output
+        plots_output=kwargs['path']+'stacked_spectra/' if 'path' in kwargs else os.getcwd()+'stacked_spectra/' #create the directory for the stacked spectra plots
         if not os.path.exists(plots_output): #if the output folder does not exist
             os.makedirs(plots_output) #create the folder  
         if periodicity: #if the spectra periodicity must be computed
-            periodicity_output=os.getcwd()+'periodicity_plots/' #create the directory for the stacked spectra plots
+            periodicity_output=kwargs['path']+'periodicity_plots/' if 'path' in kwargs else os.getcwd()+'periodicity_plots/' #create the directory for the stacked spectra plots
             if not os.path.exists(periodicity_output): #if the output folder does not exist
                 os.makedirs(periodicity_output) #create the folder  
-        if diagnostic: #if the diagnostic option is true
-            diagnostic_output=os.getcwd()+'diagnostic/'
+        if diagnostic in ['all','plots']: #if the diagnostic option is set to store the plots
+            diagnostic_output=kwargs['path']+'diagnostic/' if 'path' in kwargs else os.getcwd()+'diagnostic/'
             if not os.path.exists(diagnostic_output): #if the output folder does not exist
                 os.makedirs(diagnostic_output) #create the folder
         
@@ -3077,7 +3015,7 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
     ctr_width=kwargs.get('ctr_width',2) #store the contour width       
     smooth_kernel=kwargs.get('smooth_kernel',None) #store the lines finder smoothing kernels
     sc_threshold=kwargs.get('sc_threshold',None) #store the lines finder threshold
-    link_kernel=kwargs.get('link_kernel',None) #store the lines finder linker kernel
+    min_size=kwargs.get('min_size',None) #store the lines finder linker kernel
     rel_threshold=kwargs.get('rel_threshold',0) #store the lines finder reliability threshold
                
     #IMPORT THE DATA AND SETUP THE SPATIAL/SPECTRAL PROPERTIES#
@@ -3166,18 +3104,15 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
             mask=np.array([mask]*data.shape[0]) #transform the 2D mask into a cube
             data*=mask #mask the emission from the data
         
-            if diagnostic:
+            if diagnostic in ['all','fits']:
                 if verbose:
                     print('Writing the masked cube\n----------------------------------------------')
                 hdu=fits.PrimaryHDU(data.astype('float32'),header=header) #create the primary HDU
                 hdul=fits.HDUList([hdu]) #make the HDU list
-                if objname != '': #if the object name is given
-                    hdul.writeto(diagnostic_output+f'{objname}_masked_cube.fits',overwrite=True) #write the data into a fits
-                else:
-                    hdul.writeto(diagnostic_output+'masked_cube.fits',overwrite=True) #write the data into a fits 
+                hdul.writeto(diagnostic_output+'masked_cube.fits',overwrite=True) #write the data into a fits 
 
     #SHUFFLE THE DATA TO ALIGN THE CUBE#
-    if vfield is not None: #if a velocity field is provided
+    if vfield not in [None,'']: #if a velocity field is provided
         if verbose:
             print('Aligning the spectra\n----------------------------------------------')
         if specunits == 'm/s': #if the spectral units are m/s
@@ -3186,18 +3121,18 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
             data=cubedo(cubedo=data,operation='shuffle',vfield=vfield,v0=v0,spectralres=spectralres,verbose=True)
         aligned=True #set the aligned switch for the plots to True
         
-        if diagnostic:
+        if diagnostic in ['all','fits']:
             if verbose:
                 print('Writing the shuffled cube\n----------------------------------------------')
             header['CRPIX3']=(nchan//2)+1 #update the header so that the velocity axis is 0 at the pixel at which profiles have been centred. +1 is needed for account the stupid python 0-counting
             header['CRVAL3']=0. #update the header so that the velocity axis is 0 at the pixel at which profiles have been centred
             hdu=fits.PrimaryHDU(data.astype('float32'),header=header) #create the primary HDU
             hdul=fits.HDUList([hdu]) #make the HDU list
-            if objname != '': #if the object name is given
-                hdul.writeto(diagnostic_output+f'{objname}_shuffled_cube.fits',overwrite=True) #write the data into a fits
-            else:
-                hdul.writeto(diagnostic_output+'shuffled_cube.fits',overwrite=True) #write the data into a fits 
-            
+            hdul.writeto(diagnostic_output+'shuffled_cube.fits',overwrite=True) #write the data into a fits
+            if pix_scale<=1: #if the cube should not be regrid 
+                if verbose:
+                    print('Calculating the noise variations in the shuffled cube\n----------------------------------------------')
+                noise_variations(datacube=diagnostic_output+'shuffled_cube.fits',noise_out=diagnostic_output+'shuffled_noise',specunits=specunits,spectralres=spectralres,plot_format=plot_format.split('.')[-1],verbose=verbose)
         #REDEFINE THE SPECTRAL AXIS#
         if spectralres>0: #if the spectral resolution is positive
             v0=-(nchan//2)*spectralres #redefine the starting velocity
@@ -3209,6 +3144,37 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
             v=v[:-1]
     else:
         aligned=False #set the aligned switch for the plots to True
+        
+    #REGRID THE CUBE
+    if pix_scale>1: #if the cube must be regrid
+        if verbose:
+            print('Regriding the cube\n----------------------------------------------')
+        pix_scale=int(pix_scale) #convert the sampling factor to an integer (in case it wasn't)
+        wcs=WCS(header).dropaxis(2) #store the original wcs
+        regrid_wcs=wcs[::pix_scale,::pix_scale] #create the regrid wcs
+        shape_out=(int(round(data.shape[1]/pix_scale)),int(round(data.shape[2]/pix_scale))) #define the spatial shape of the regrid cube
+        dummy=np.zeros((data.shape[0],shape_out[0],shape_out[1])) #create a dummy regrid cube to host the regrid data
+        for i in tqdm(range(data.shape[0]),total=data.shape[0],desc='Channels regridded'): #do the regriding
+            dummy[i]=reproj((data[i],wcs),regrid_wcs,shape_out=shape_out,return_footprint=False,order='nearest-neighbor')
+        data=dummy.copy() #copy the regrid cube
+        converttoHI_kwargs['beamarea']=(pixelres*pix_scale)**2 #the beam area is now the new pixel size
+        if diagnostic in ['all','fits']:
+            if verbose:
+                print('Writing the regrid cube\n----------------------------------------------')
+            header['NAXIS1']=int(header['NAXIS1']/pix_scale) #new spatial axis size
+            header['NAXIS2']=int(header['NAXIS2']/pix_scale) #new spatial axis size
+            header['CRPIX1']/=pix_scale #new central pixel
+            header['CRPIX2']/=pix_scale #new central pixel
+            header['CDELT1']*=pix_scale #new pixel resolution
+            header['CDELT2']*=pix_scale #new pixel resolution
+            
+            hdu=fits.PrimaryHDU(data,header=header) #create the primary HDU
+            hdul=fits.HDUList([hdu]) #make the HDU list
+            hdul.writeto(diagnostic_output+'regrid_cube.fits',overwrite=True) #write the data into a fits file
+            
+            if verbose:
+                print('Calculating the noise variations in the regrid cube\n----------------------------------------------')
+            noise_variations(datacube=diagnostic_output+'regrid_cube.fits',noise_out=diagnostic_output+'regrid_noise',specunits=specunits,spectralres=spectralres,plot_format=plot_format.split('.')[-1],verbose=verbose)
     
     #ASSIGN THE PIXEL TO THE CORRECT REGION#
     if verbose:
@@ -3223,9 +3189,12 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
         xvalid,yvalid=__assign_to_concentric(data,nregions,pa,inc,rmin,rmax,between_angles,x0,y0) #assign the pixel to the concentric circles
     elif shape=='cells':
         xvalid,yvalid=__assign_to_cells(data.shape[2],data.shape[1],nregions) #assign the pixel to the cells
-    
+
     #PREPARE THE FIGURES FOR THE RESULT#
-    wcs=WCS(header,naxis=2) #store the wcs
+    if pix_scale>1: #if the cube have been regrid
+        wcs=regrid_wcs.copy()
+    else:
+        wcs=WCS(header,naxis=2) #store the wcs
 
     fig1=plt.figure(figsize=(16,8)) #create the figure for the stacked positions
     ax1=fig1.add_subplot(121,projection=wcs) #create the subplot for the stacked pixels
@@ -3243,18 +3212,20 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
         ax1.set_ylim(ylim) #set the ylim 
            
     cm=cl.LinearSegmentedColormap.from_list("",['black','orange','lime','deeppink','blue','yellow','cyan','red'])
-    colors=cm(np.linspace(0,1,nregions))
+    colors=cm(np.linspace(0,1,len(xvalid)))
         
     #DO THE STACKING#
-    if verbose and diagnostic:
+    if verbose and diagnostic in ['all','fits','plots']:
         warnings.warn("You activated the diagnostic mode. Stacking may take a while and stores large quantity of plots in your disk! If there will be a serious memory leak, run 'import matplotlib' and matplotlib.use('agg') before using the stacking function.")
     if verbose and nregions>50:
         warnings.warn(f"You selected a large ({nregions}) number of regions. Stacking may take a while and stores large quantity of plots in your disk! If there will be a serious memory leak, run 'import matplotlib' and matplotlib.use('agg') before using the stacking function.")
     validmap=np.zeros((data.shape[1],data.shape[2]),dtype=int) #initialize a map for showing the stacked positions. We want to draw contours over it, so the idea is to set each valid x,y pixel of the region i to have the value of i and then draw the contours on the map with level equal to i
-    for i in range(nregions):
-        if diagnostic:
+    for i in range(len(xvalid)):
+        if diagnostic in ['all','plots']:
+            diagnostic_plots=True
             diagnostic_plots_output=diagnostic_output+f'Region_{i+1}_spectra/'
         else:
+            diagnostic_plots=False
             diagnostic_plots_output=None
         if xvalid[i] == [] and yvalid[i] == []: #if no valid pixels have been found
             warnings.warn(f'no valid pixel found for region {i+1}. Skip to the next region')
@@ -3270,7 +3241,7 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
             #CREATE THE STACKED SPECTRUM#
             if verbose:
                 print(f'Computing the stacked spectrum for region {i+1}\n----------------------------------------------')
-            spectrum,rms,exp=__stack(data,xvalid[i],yvalid[i],weighting,stack_fluxrange=stack_fluxrange,stack_statistics=stack_statistics,flip=flip,diagnostic=diagnostic,v=v,fluxunits=fluxunits,c=colors[i],aligned=aligned,outdir=diagnostic_plots_output,plot_format='.jpg') #do the stacking
+            spectrum,rms,exp=__stack(data,xvalid[i],yvalid[i],weighting,stack_fluxrange=stack_fluxrange,stack_statistics=stack_statistics,flip=False,diagnostic=diagnostic_plots,v=v,fluxunits=fluxunits,c=colors[i],aligned=aligned,outdir=diagnostic_plots_output,plot_format='.jpg') #do the stacking
             if np.all(np.isnan(spectrum)): #if the spectrum contains only nans
                 rms=[np.nan] #set the rms to be nan
             #PREPARE THE VARIABLES FOR THE LINES FINDER
@@ -3290,7 +3261,7 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
     #SOURCE FINDING#
     if verbose:
         print('Running the lines finder on the stacked spectra\n----------------------------------------------')                
-    mask,smooth_rms,reliable_ids=lines_finder(stacked_spectra,stacked_rms,**kwargs) #run the source finder
+    mask,smooth_rms,reliable_ids,_=lines_finder(stacked_spectra,stacked_rms,**kwargs) #run the source finder
     
     #ADD THE RESULT OF THE FINDER TO THE DETECTION MAP#
     if verbose:
@@ -3298,7 +3269,8 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
     detection_map=np.zeros((data.shape[1],data.shape[2]))*np.nan #initialize the detection map where we are going to show if a region has detections in it
     cmap=cl.ListedColormap([(0.5,0,0),(0,0.5,0),(0.5,0.5,0)]) #define the colormap for the detections
     ax2=fig1.add_subplot(122,projection=wcs) #create the subplot for the stacked pixels
-    ax2.imshow(np.nansum(data,axis=0),origin='lower',aspect='equal',cmap='gray_r',norm=cl.PowerNorm(gamma=0.3,vmin=0,vmax=0.75*np.nanmax(np.nansum(data,axis=0)))) #plot the image
+    ax2.imshow(np.nansum(data,axis=0),origin='lower',aspect='equal',cmap='gray_r',norm=cl.PowerNorm(gamma=0.3,vmin=0,vmax=1.5*np.nanmax(np.nansum(data,axis=0)))) #plot the image
+    #ax2.imshow(np.nansum(data,axis=0),origin='lower',aspect='equal',cmap='gray_r',norm=cl.PowerNorm(gamma=0.3,vmin=0,vmax=0.75*np.nanmax(np.nansum(data,axis=0)))) #plot the image
     ax2.set_xlabel('RA') #set the x-axis label
     ax2.coords[1].set_ticklabel_visible(False) #hide the y-axis ticklabels and labels
     if shape in ['cones','concentric']:
@@ -3312,7 +3284,7 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
         mags_list=[] #create the list to store the periodicity amplitude of each spectrum and each smoothing iteration
         for k in range(len(smooth_kernel)): #for each smoothing kernel
             mags_list.append([]) #extend the periodicity amplitude list. We are going to store in each slot of the list the amplitudes of all the spectra for a given smoothing kernel
-    for i in range(nregions): #reiter over the regions to plot and store the result of the line finder. I can't do that internally the first iteration because of the way the lines finder is written
+    for i in range(len(xvalid)): #reiter over the regions to plot and store the result of the line finder. I can't do that internally the first iteration because of the way the lines finder is written
         plt.ioff() #disable the interactive plotting 
         if not np.all(np.isnan(stacked_spectra[i])): #if the stacked spectrum is not empty         
             if rel_threshold <=0 or rel_threshold is None: #if the reliability was not computed
@@ -3333,10 +3305,10 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
             nrows=1 #number of rows in the plot
             ncols=2 #number of columns in the plot    
             fig2=plt.figure(figsize=(8*ncols,4*nrows)) #create the figure for the stacked spectra
-            fig2=__plot_stack_result(v,stacked_spectra[i],stacked_rms_list[i],stacked_exp[i][:n_spectra[i]],smooth_rms[i],fluxunits,mask=np.abs(mask[i]),nrows=nrows,ncols=ncols,color=colors[i],aligned=aligned,idx=1,smooth_kernel=smooth_kernel,sc_threshold=sc_threshold,link_kernel=link_kernel,**converttoHI_kwargs)
+            fig2=__plot_stack_result(v,stacked_spectra[i],stacked_rms_list[i],stacked_exp[i][:n_spectra[i]],smooth_rms[i],fluxunits,mask=np.abs(mask[i]),nrows=nrows,ncols=ncols,color=colors[i],aligned=aligned,idx=1,smooth_kernel=smooth_kernel,sc_threshold=sc_threshold,min_size=min_size,**converttoHI_kwargs)
             fig2.savefig(plots_output+f'stacked_spectrum_{i+1}'+'.jpg',dpi=300,bbox_inches='tight')
             plt.close(fig=fig2)
-            
+    
             #DO THE PERIODICITY PLOTS#
             if periodicity: #if the periodicity plots must be made
                 if verbose and i == 0:
@@ -3406,6 +3378,7 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
         cbar.ax.set_ylabel('For detection limit look at stacked spectra',rotation=90) #add the colorbar label
         cbar.ax.get_yaxis().labelpad=10 #fix the position of the colorbar
     fig1.subplots_adjust(wspace=0)
+    detection_map[np.isnan(detection_map)]=0 #convert to 0 the nans in the detection map. This step is necessary to import the map into kvis
     hdu=fits.PrimaryHDU(detection_map.astype('float32'),header=wcs.to_header()) #create the primary HDU
     hdul=fits.HDUList([hdu]) #make the HDU list 
     
@@ -3434,8 +3407,8 @@ def stacking(datacube='',mask2d='',vfield='',pa=None,inc=None,stackcenter=None,s
     plt.close('all')
     
     if save_numpy: #if the variables must be saved as numpy arrays in the disk
-        np.save(output+'stacked_spectra',stacked_spectra) #save the stacked spectra
-        np.save(output+'stacked_rms',stacked_rms) #save the stacked rms
+        np.save(output+'_stacked_spectra',stacked_spectra) #save the stacked spectra
+        np.save(output+'_stacked_rms',stacked_rms) #save the stacked rms
     
     return stacked_spectra,source_spectra,stacked_rms,source_mask
                       
@@ -3503,6 +3476,8 @@ def velfi(vfield='',radii=None,vrot=None,pa=None,inc=None,vrad=None,vsys=None,vc
     if output[0]=='.': #if the output name start with a . means that it contains a path
         path=''.join(a+'/' for a in output.split('/')[:-1]) #recover the path from the output string
         if not os.path.exists(path): os.makedirs(path) #create the folder if the output folder does not exist
+    else:
+        output=kwargs['path']+output if 'path' in kwargs else os.getcwd()+output
     #CHECK THE KWARGS#
     pixunits=kwargs.get('pixunits',None) #store the spatial units
     if pixunits not in [None,'deg','arcmin','arcsec']: #if wrong spatial units are given
@@ -4247,8 +4222,8 @@ def create_config(name='default_parameters'):
             'replace     =      #before smoothing the spectrum during n source finder iteration, every flux value that was already detected in a previous iteration will be replaced by this value multiplied by the original noise level in the non-smoothed data cube, while keeping the original sign of the data value. This feature can be disabled by specifying a value of < 0. (default: 2)\n'
             "statistics  =      #statistic to be used in the noise measurement process of the source finder. Possible values are 'std' or 'mad' for standard deviation and median absolute deviation, respectively. Standard deviation is by far the fastest algorithm, but it is also the least robust one with respect to emission and artefacts in the data. Median absolute deviation is far more robust in the presence of strong, extended emission or artefacts (default: 'mad')\n"
             "fluxrange   =      #flux range to be used in the noise measurement of the source finder. If set to 'negative' or 'positive', only pixels with negative or positive flux will be used, respectively. This can be useful to prevent real emission or artefacts from affecting the noise measurement. If set to anything else, all pixels will be used in the noise measurement irrespective of their flux (default: 'negative')\n"
-            'link_ker    =      #minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker (default: 3)\n'
-            'min_size    =      #minimum number of channels a source can cover (default: 3)\n'
+            'link_ker    =      #maximum merging length. Detections with a separation of up to this value will be merged into the same source (default: 3)\n'
+            'min_size    =      #minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker (default: 3)\n'
             'rel_thresh  =      #reliability threshold in the range of 0 to 1. Sources with a reliability below this threshold will be discarded (default: 0)\n'
             'rel_kernel  =      #scaling factor for the size of the Gaussian kernel used when estimating the density of positive and negative detections in the reliability parameter space (default: 0.4)\n'
             'rel_snrmin  =      #lower signal-to-noise limit for reliable sources. Detections that fall below this threshold will be classified as unreliable and discarded. The value denotes the integrated signal-to-noise ratio of the source. Note that the spectral resolution is assumed to be equal to the channel width (default: 3)\n'
@@ -4321,8 +4296,18 @@ def __assign_to_cells(xshape,yshape,nregions):
         None
     """
     #GET THE NUMBER OF CELLS PER DIMENSION#
-    xstart=np.linspace(0,xshape,round(np.sqrt(nregions))+1) #starting x-coordinate of each cell
-    ystart=np.linspace(0,yshape,round(np.sqrt(nregions))+1) #starting y-coordinate of each cell
+    #as the number of cells might not be a divisor of the axis lengths, we have to center the grid
+    ncells=round(np.sqrt(nregions))+1 #the number of cells per axis. +1 is needed because if I have 1 single region, then xstart must contains two values, the starting (0) and ending pixel (xmax or ymax). But np.linspace(0,xmax,1) will give a single value, 0, while np.linspace(0,xmax,1+1) will give 0 and xmax, hence we need the +1.
+    
+    xdivisor=np.sqrt(nregions)*np.floor(xshape/np.sqrt(nregions)) #this is the number closest to xshape that is divisible by the number of cells along the x-axis. np.floor is needed because we want the closest number lower than xshape
+    x0=round((xshape-xdivisor)/2) #the first pixel along the x-axis is given by half of the difference between the x-axis length (xshape) and xdivisor
+    x1=xdivisor+x0 #the last pixels along the x-axis is then given by the sum between xdivsor and the first pixel
+    xstart=np.linspace(x0,x1,ncells) #starting x-coordinate of each cell
+    
+    ydivisor=np.sqrt(nregions)*np.floor(yshape/np.sqrt(nregions)) #this is the number closest to yshape that is divisible by the number of cells along the y-axis. np.floor is needed because we want the closest number lower than xshape
+    y0=round((yshape-ydivisor)/2) #the first pixel along the y-axis is given by half of the difference between the x-axis length (yshape) and ydivisor
+    y1=ydivisor+x0 #the last pixels along the y-axis is then given by the sum between xdivsor and the first pixel
+    ystart=np.linspace(y0,y1,ncells) #starting y-coordinate of each cell
      
     #DO THE ASSIGNMENT#
     xvalid=[] #initialize the x-coordinates list of the pixel in the cells
@@ -4718,7 +4703,7 @@ def __plot_kpcline(pixelres,asectokpc,xlim,left_space,upper_space):
     return ax
     
 #############################################################################################
-def __plot_stack_result(v,spectrum,rms,expected_rms,smooth_rms,fluxunits,mask=None,aligned=False,nrows=1,ncols=2,color='blue',idx=1,smooth_kernel=None,sc_threshold=None,link_kernel=None,**converttoHI_kwargs):
+def __plot_stack_result(v,spectrum,rms,expected_rms,smooth_rms,fluxunits,mask=None,aligned=False,nrows=1,ncols=2,color='blue',idx=1,smooth_kernel=None,sc_threshold=None,min_size=None,**converttoHI_kwargs):
     """Plot the stacked spectrum and the rms as a function of the number of stacked spectra.
 
     Args:
@@ -4737,7 +4722,7 @@ def __plot_stack_result(v,spectrum,rms,expected_rms,smooth_rms,fluxunits,mask=No
         idx (int): index of the plot (idx <= nrows*ncols)
         smooth_kernel (int/list of int): boxcar kernel size (or list of kernel sizes) to apply. The individual kernel sizes must be odd integer values of 3 or greater and denote the full width of the Boxcar filter used to smooth the spectrum. Set to None or 1 to disable.
         sc_threshold (float): flux threshold to be used by the source finder relative to the measured rms in each smoothing iteration. Values in the range of about 3 to 5 have proven to be useful in most situations, with lower values in that range requiring use of the reliability filter to reduce the number of false detections.
-        link_kernel (int): minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker.
+        min_size (int): The minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker.
         
     Kwargs:
         fluxunits (str): string with the flux units
@@ -4772,10 +4757,7 @@ def __plot_stack_result(v,spectrum,rms,expected_rms,smooth_rms,fluxunits,mask=No
     ax=fig.add_subplot(nrows,ncols,idx+1) #create the subplot for the rms
     if idx==1: #if the plot is in the first row
         ax.set_title('RMS',fontsize=20,pad=10) #set the title
-    ## The new beamarea is the regionarea/beamarea
-    regionarea=converttoHI_kwargs['pixelres']**2*N #the region area is the number of pixel in the area (which is the number of stacked spectra) multiplited by the pixel resolution squared
-    ##
-    beamarea=converttoHI_kwargs['beamarea']#regionarea/converttoHI_kwargs['beamarea']
+    beamarea=converttoHI_kwargs['beamarea'] #get the beam area
     pixunits=converttoHI_kwargs['pixunits'] #get the pixel units
     spectralres=converttoHI_kwargs['spectralres'] #get the spectral resolution
     specunits=converttoHI_kwargs['specunits'] #get the spectral units
@@ -4790,8 +4772,8 @@ def __plot_stack_result(v,spectrum,rms,expected_rms,smooth_rms,fluxunits,mask=No
     ax.set_xlim(1,N) #set the xlim
     ax.yaxis.set_label_position('right')
     ax.yaxis.tick_right()
-    if None not in [sc_threshold,link_kernel]: #if the source finder is used
-        ax.text(0.025,0.05,f"{sc_threshold}\u03C3 {link_kernel}-channel detection limit: {rms[-1]*sc_threshold*link_kernel:.1e} {'cm$^{-2}$'}",transform=ax.transAxes) #add the information of the detection limit
+    if None not in [sc_threshold,min_size]: #if the source finder is used
+        ax.text(0.025,0.05,f"{sc_threshold}\u03C3 {min_size}-channel detection limit: {rms[-1]*sc_threshold*min_size:.1e} {'cm$^{-2}$'}",transform=ax.transAxes) #add the information of the detection limit
     ax.legend(loc='upper right')
     
     return fig
@@ -4817,30 +4799,29 @@ def __plot_stack_spectrum(v,spectrum,mask,color,aligned,rms,smooth_rms,fluxunits
     Raises:
         None
     """
+    if mask is None: #if a mask is not given
+        mask=np.ones(spectrum.shape) #initialize the mask as nans
     ax=plt.gca() #get the current axis
-    exponent=int(np.nanmean(np.log10(np.abs(spectrum[np.where((~np.isnan(spectrum)) & (spectrum != 0))])))) #mean power of the flux values
-    if mask is None: #if no mask is provided
-        ax.plot(v,spectrum/10**exponent,c=color,lw=1,zorder=100) #plot the spectrum
+    exponent=int(np.nanmean(np.log10(np.abs(spectrum[np.where((~np.isnan(spectrum)) & (spectrum != 0))])))) if not np.all(spectrum == 0) else 0 #mean power of the flux values
+    if ~np.all(np.isnan(mask)): #if a mask is provided means that there is a source in the spectrum
+        mask[mask>0]=1 #set to 1 the positive values
+    if smooth_kernel is not None: #if smoothing kernel have been used in the source finder
+        alpha=np.linspace(0,1,len(smooth_kernel)+1) #set the transparency of the plot
+        lw=np.arange(len(smooth_kernel))+1 #set the linewidth
+        for i in range(len(smooth_kernel)): #for each kernel
+            if i==len(smooth_kernel)-1: #if we are plotting the last kernel we add the legend labels
+                ax.plot(v,conv.convolve(spectrum/10**exponent,conv.Box1DKernel(smooth_kernel[i])),c=color,lw=lw[i],ls='dotted',alpha=alpha[i+1],label='Noise') #plot the smoothed stacked spectrum
+                if ~np.all(np.isnan(mask)): #if a source is in the spectrum
+                    ax.plot(v,conv.convolve(spectrum/10**exponent,conv.Box1DKernel(smooth_kernel[i]))*mask,c=color,lw=lw[i],alpha=alpha[i+1],label='Source') #plot the source smoothed stacked spectrum in the channel range covered by the galaxy emission
+            else:
+                ax.plot(v,conv.convolve(spectrum/10**exponent,conv.Box1DKernel(smooth_kernel[i])),c=color,lw=lw[i],ls='dotted',alpha=alpha[i+1]) #plot the smoothed stacked spectrum
+                if ~np.all(np.isnan(mask)): #if a source is in the spectrum
+                    ax.plot(v,conv.convolve(spectrum/10**exponent,conv.Box1DKernel(smooth_kernel[i]))*mask,c=color,lw=lw[i],alpha=alpha[i+1]) #plot the masked smoothed stacked spectrum in the channel range covered by the galaxy emission
     else:
-        if ~np.all(np.isnan(mask)): #if a mask is provided means that there is a source in the spectrum
-            mask[mask>0]=1 #set to 1 the positive values
-        if smooth_kernel is not None: #if smoothing kernel have been used in the source finder
-            alpha=np.linspace(0,1,len(smooth_kernel)+1) #set the transparency of the plot
-            lw=np.arange(len(smooth_kernel))+1 #set the linewidth
-            for i in range(len(smooth_kernel)): #for each kernel
-                if i==len(smooth_kernel)-1: #if we are plotting the last kernel we add the legend labels
-                    ax.plot(v,conv.convolve(spectrum/10**exponent,conv.Box1DKernel(smooth_kernel[i])),c=color,lw=lw[i],ls='dotted',alpha=alpha[i+1],label='Noise',zorder=100) #plot the smoothed stacked spectrum
-                    if ~np.all(np.isnan(mask)): #if a source is in the spectrum
-                        ax.plot(v,conv.convolve(spectrum/10**exponent,conv.Box1DKernel(smooth_kernel[i]))*mask,c=color,lw=lw[i],alpha=alpha[i+1],label='Source',zorder=100) #plot the source smoothed stacked spectrum in the channel range covered by the galaxy emission
-                else:
-                    ax.plot(v,conv.convolve(spectrum/10**exponent,conv.Box1DKernel(smooth_kernel[i])),c=color,lw=lw[i],ls='dotted',alpha=alpha[i+1],zorder=100) #plot the smoothed stacked spectrum
-                    if ~np.all(np.isnan(mask)): #if a source is in the spectrum
-                        ax.plot(v,conv.convolve(spectrum/10**exponent,conv.Box1DKernel(smooth_kernel[i]))*mask,c=color,lw=lw[i],alpha=alpha[i+1],zorder=100) #plot the masked smoothed stacked spectrum in the channel range covered by the galaxy emission
-        else:
-            ax.plot(v,spectrum/10**exponent,c=color,lw=2,ls='dotted',label='Noise',zorder=100) #plot the full spectrum
-            if ~np.all(np.isnan(mask)): #if a source is in the spectrum
-                ax.plot(v,mask*spectrum/10**exponent,c=color,lw=2,label='Source',zorder=100)  #plot the masked stacked spectrum in the channel range covered by the galaxy emission
-        ax.legend(loc='upper right',prop={'size':11}).set_zorder(1000)
+        ax.plot(v,spectrum/10**exponent,c=color,lw=2,ls='dotted',label='Noise') #plot the full spectrum
+        if ~np.all(np.isnan(mask)): #if a source is in the spectrum
+            ax.plot(v,mask*spectrum/10**exponent,c=color,lw=2,label='Source')  #plot the masked stacked spectrum in the channel range covered by the galaxy emission
+    ax.legend(loc='upper right',prop={'size':11}).set_zorder(1000)
     ax.axhline(y=0,ls='--',c='black') #draw the 0-flux line
     if aligned: #if the spectrum is the aligned spectrum
         ax.axvline(x=0,ls='-.',c='black') #draw the 0 velocity line
@@ -5071,10 +5052,10 @@ def __reliability(pos_sources,neg_sources,snrmin,threshold,rel_kernel,**kwargs):
     for i in range(len(rel_params)): #update the scatter plots with the highlight of the reliable sources
         if i==0:
             ax[i].scatter(rel_x,rel_y,s=4*s,c='black',label='Reliable')
-            ax[i].legend(loc='upper left')
+            ax[i].legend(loc='lower left',ncol=2)
         elif i==1:
             ax[i].scatter(rel_x,rel_z,s=4*s,c='black',label='Reliable')
-            ax[i].legend(loc='upper left')
+            ax[i].legend(loc='lower left',ncol=2)
         else:
             ax[i].scatter(rel_y,rel_z,s=4*s,c='black',label='Reliable')
             ax[i].legend(loc='upper left')
@@ -5196,64 +5177,6 @@ def __source_linker(data,mask,kernel,min_size):
         data (array): 1D array with the data
         mask (array): 1D array with the mask
         kernel (int): minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker.
-        separation (int): maximum channel separation between two sources to be considered a single source
-        
-    Kwargs:
-        None
-        
-    Returns:
-        Array of values representing the sources indexes.
-        
-    Raises:
-        ValueError: If the kernel is not an odd number
-    """
-    linked_mask=np.zeros(mask.shape) #initialize the linked mask
-    pos_index=1 #initialize the positive source index
-    neg_index=-1 #initialize the negative source index
-    source=False #initialize the source check
-    #REJECT THE DETECTIONS COVERING LESS THAN kernel CHANNELS#
-    for i in range(len(mask)): #run over the mask
-        if np.all(mask[i:i+kernel])>0: #if all the channels in the kernel are marked as a source
-            if not source: #if it is a new source
-                start=i #store the channel index
-                source=True #tell you have a source
-            else: #if you are already looking at a source
-                pass #do nothing
-        else:
-            if source: #if you were looking at a source
-                if np.nansum(data[start:i+kernel-1])>0: #if the source is positive (-1 accounts for 0-indexing and slicing). Imagine 'start' is channel 5 and the kernel=5. If I link the smallest source, it will cover channels 5, 6, 7, 8 and 9. Which means, channel 10 is a non-detection. The kernel gets to channel 10 when i is 6, because when i is 6 than i:i+kernel (that is 6:11) covers channels 6, 7, 8, 9 and 10 because slicing excludes the last element. So, start:i+kernel (that is 5:11) would be 5, 6, 7, 8, 9, 10. But I don't want 10, hence I use -1: start:i+kernel-1 = 5:10 = [5,6,7,8,9]
-                    linked_mask[start:i+kernel-1]=pos_index #assign the positive label to the source (-1 accounts for 0-indexing)
-                    pos_index+=1 #increase the positive label
-                elif np.nansum(data[start:i+kernel-1])<0: #if the source is negative (-1 accounts for 0-indexing)
-                    linked_mask[start:i+kernel-1]=neg_index #assign the negative label to the source (-1 accounts for 0-indexing)
-                    neg_index-=1 #decrease the negative label
-                else: #if the source has a total flux of 0
-                    pass #do nothing
-                source=False #tell you are no more looking for a source
-    #LINK NEIGHBOUR DETECTIONS#
-    i=1
-    while i < np.nanmax(linked_mask):
-        if (np.where(linked_mask==i+1)[0][0]-np.where(linked_mask==i)[0][-1]-1) <= min_size and np.all(linked_mask[np.where(linked_mask==i)[0][-1]+1:np.where(linked_mask==i+1)[0][0]]==0): #the first condition checks that the separation between two consecutive positive/negative sources, i.e., the difference between the last channel of the former and the first channel of the latter, is less than the maximum allowed separation. -1 is need because if the last channel is 4 and the first is 6, than the separation is 6-4-1=1 and not 6-4=2. The second condition checks that there are not sources between the two (it can happend that you have a positive then negative then positive and the two positives cannot be linked together.    
-            linked_mask[np.where(linked_mask>i)[0]]-=1
-        else:
-            i+=1
-    i=-1
-    while i > np.nanmin(linked_mask):
-        if (np.where(linked_mask==i-1)[0][0]-np.where(linked_mask==i)[0][-1]-1) <= min_size and np.all(linked_mask[np.where(linked_mask==i)[0][-1]+1:np.where(linked_mask==i-1)[0][0]]==0): #see above for description of conditions       
-            linked_mask[np.where(linked_mask<i)[0]]+=1
-        else:
-            i-=1
-
-    return linked_mask
-
-############################################################################################# 
-def __source_linker_new(data,mask,kernel,min_size):
-    """Assign to kernel-size consecutive positive/negative elements of a 1D array the same value representing the index of the source.
-
-    Args:
-        data (array): 1D array with the data
-        mask (array): 1D array with the mask
-        kernel (int): minimum size of sources in channels. Sources that fall below this limit will be discarded by the linker.
         min_size (int): minimum number of channels a source can cover
         
     Kwargs:
@@ -5341,7 +5264,7 @@ def __stack(data,x,y,weighting,stack_fluxrange='negative',stack_statistics='mad'
             os.makedirs(outdir) #create the folder
             
     if flip: #if the spectra must be flipped
-        data=np.flip(data,axis=0) #flip the  cube along the spectral axis
+        data=np.flip(data,axis=0) #flip the cube along the spectral axis
       
     if diagnostic: #if the diagnostic plots must be made
         plt.ioff() #disable the interactive plotting 
@@ -5373,8 +5296,8 @@ def __stack(data,x,y,weighting,stack_fluxrange='negative',stack_statistics='mad'
                     ax=__plot_stack_spectrum(v,stack/weights,None,color,aligned,stack_rms[-1],None,fluxunits)
                 ax.set_xlabel('')
                 ax.xaxis.set_ticklabels([])
-                if N>1: #after the first iteration
-                    ax.set_ylim(ylim)
+                #if N>1: #after the first iteration
+                    #ax.set_ylim(ylim)
                 
                 ax=fig.add_subplot(nrows,ncols,2) #create the subplot for the spectrum to be stacked
                 ax=__plot_stack_spectrum(v,data[:,i[0],i[1]],None,color,aligned,pre_rms,None,fluxunits)
@@ -5399,10 +5322,10 @@ def __stack(data,x,y,weighting,stack_fluxrange='negative',stack_statistics='mad'
             if diagnostic: #if the diagnostic plots must be made
                 ax=fig.add_subplot(nrows,ncols,3) #create the subplot for the post-stack stacked spectrum
                 ax=__plot_stack_spectrum(v,stack/weights,None,color,aligned,stack_rms[-1],None,fluxunits)
-                if N==1: #after the first iteration
-                    ylim=ax.get_ylim() #get the ylim
-                else:
-                    ax.set_ylim(ylim)
+                #if N==1: #after the first iteration
+                    #ylim=ax.get_ylim() #get the ylim
+                #else:
+                    #ax.set_ylim(ylim)
                 fig.subplots_adjust(top=0.95,hspace=0.1)
                 fig.savefig(outdir+f'result_after_{N}_stacked_spectra'+plot_format,dpi=300,bbox_inches='tight')
                 plt.close()
