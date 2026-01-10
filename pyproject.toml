@@ -1,6 +1,35 @@
 [build-system]
-requires = [
-   "setuptools",
-   "wheel"
-]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "nicci"
+version = "1.0"
+description = "A collection of functions for the analysis of astronomical data cubes and images"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Simone Veronese", email = "veronese.astro@gmail.com" }
+]
+
+dependencies = [
+    "astropy==7.1.0",
+    "matplotlib==3.10.6",
+    "pvextractor==0.4",
+    "scipy==1.16.2",
+    "tqdm==4.67.1",
+    "numpy==2.3.3",
+    "pandas==2.3.2"
+]
+
+[project.urls]
+Homepage = "https://github.com/SJVeronese/nicci-package"
+Repository = "https://github.com/SJVeronese/nicci-package"
+Issues = "https://github.com/SJVeronese/nicci-package/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
