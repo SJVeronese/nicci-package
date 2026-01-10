@@ -4,7 +4,7 @@ nicci: A collection of functions for the analysis of astronomical data cubes and
 __version__ = "1.0"
 
 #Public API
-from .core import (
+from .main import (
     assign_to_cells,
     assign_to_rings,
     chanmap,

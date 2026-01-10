@@ -21,12 +21,16 @@ Upgrade nicci with pip
 
 ## Requirements
 * astropy 7.1.0
+* [colourspace](https://github.com/gillesferrand/colourspace)
+* [CosmosCanvas] (https://github.com/mlarichardson/CosmosCanvas)
 * matplotlib 3.10.6
 * numpy 2.3.3
 * pandas 2.2.2
 * pvextractor 0.4
 * scipy 1.16.2
 * tqdm 4.67.1
+
+[colourspace](https://github.com/gillesferrand/colourspace) and [CosmosCanvas] (https://github.com/mlarichardson/CosmosCanvas) must be installed manually.
 
 ## List of functions
 * assign_to_cells: Partition a 2D array into a specified number of  approximately equal, rectangular regions and return the pixel coordinates belonging to each region.
