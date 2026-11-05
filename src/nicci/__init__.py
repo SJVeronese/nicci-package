@@ -1,52 +1,34 @@
 """
 nicci: A collection of functions for the analysis of astronomical data cubes and images
 """
-__version__ = "1.0"
+from importlib.metadata import PackageNotFoundError, version
 
-#Public API
-from .main import (
-    assign_to_cells,
-    assign_to_rings,
-    chanmap,
-    convert_to_HI,
-    convert_from_HI,
-    fits_cutout,
-    hi_mass,
-    lines_finder,
-    load_data,
-    make_figure,
-    plot_mom0,
-    plot_mom1,
-    plot_mom2,
-    plot_noise,
-    plot_pvslice,
-    pvslice,
-    RMS,
-    shuffle,
-    stack,
-    velfi,
-)
+try:
+    __version__ = version("nicci")
+except PackageNotFoundError:
+    # package not installed (e.g. running directly from source)
+    __version__ = "0.0.0+unknown"
+
+# Import order matters: utils/io have no internal nicci dependencies;
+# finder depends on utils; plotter depends on finder/io/utils;
+# dynamics depends on utils/plotter; stacking depends on finder/io/plotter/utils.
+from . import cosmoscanvas
+from . import utils
+from . import io
+from . import finder
+from . import plotter
+from . import dynamics
+from . import stacking
+from . import photometry
 
 #Explicit public namespace
 __all__ = [
-    "assign_to_cells",
-    "assign_to_rings",
-    "chanmap",
-    "convert_to_HI",
-    "convert_from_HI",
-    "fits_cutout",
-    "hi_mass",
-    "lines_finder",
-    "load_data",
-    "make_figure",
-    "pvslice",
-    "plot_mom0",
-    "plot_mom1",
-    "plot_mom2",
-    "plot_noise",
-    "plot_pvslice",
-    "RMS",
-    "shuffle",
-    "stack",
-    "velfi",
+    "cosmoscanvas",
+    "utils",
+    "io",
+    "finder",
+    "plotter",
+    "dynamics",
+    "stacking",
+    "photometry",
 ]
